@@ -1,17 +1,11 @@
 ---
 - name: Retrieve a variable from the fact cache and use it
   hosts: localhost
-  gather_facts: false
+  # gather_facts must be set to true to automatically load the cached facts.
+  gather_facts: true
   tasks:
-    - name: Load the welcome_message fact from the cache
-      ansible.builtin.fact_cache:
-        fact: welcome_message
-        state: present
-        load: true
-        force: true
-      delegate_to: localhost
-      run_once: true
-
+    # No need for a separate task to load the fact cache.
+    # The 'gather_facts: true' line handles this automatically.
     - name: Print the retrieved welcome message
       ansible.builtin.debug:
         msg: "Retrieved message: {{ ansible_facts.welcome_message }}"
