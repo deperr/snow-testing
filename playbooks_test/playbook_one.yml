@@ -1,4 +1,6 @@
-- name: Generate a variable and print it for AAP workflow
+---
+
+- name: Generate a variable and make it available for AAP workflow
   hosts: localhost
   gather_facts: true
   tasks:
@@ -6,9 +8,10 @@
       ansible.builtin.set_fact:
         welcome_message: "Hello from Playbook 1! The current timestamp is {{ ansible_date_time.iso8601 }}"
 
-    - name: Print the welcome message for AAP to capture
-      # This debug output is what the AAP workflow will capture.
-      ansible.builtin.debug:
-        msg: "The_Message_Is: {{ welcome_message }}"
+    - name: Persist the welcome message for the AAP workflow
+      # set_stats is the reliable way to make a variable available to a workflow.
+      ansible.builtin.set_stats:
+        data:
+          welcome_message: "{{ welcome_message }}"
       delegate_to: localhost
       run_once: true
