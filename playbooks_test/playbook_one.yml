@@ -1,15 +1,14 @@
-- name: Set a variable and save to fact cache
+- name: Generate a variable and print it for AAP workflow
   hosts: localhost
-  # gather_facts must be set to true to resolve the previous error.
   gather_facts: true
   tasks:
-    # This new task ensures the fact cache directory exists before use.
-    - name: Ensure fact cache directory exists
-      ansible.builtin.file:
-        path: "{{ lookup('env', 'PWD') }}/fact_cache"
-        state: directory
-        mode: '0755'
-
     - name: Set a dynamic welcome message
       ansible.builtin.set_fact:
         welcome_message: "Hello from Playbook 1! The current timestamp is {{ ansible_date_time.iso8601 }}"
+
+    - name: Print the welcome message for AAP to capture
+      # This debug output is what the AAP workflow will capture.
+      ansible.builtin.debug:
+        msg: "The_Message_Is: {{ welcome_message }}"
+      delegate_to: localhost
+      run_once: true

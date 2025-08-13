@@ -1,9 +1,9 @@
-- name: Retrieve a variable from the fact cache and use it
+- name: Use a variable passed via AAP workflow
   hosts: localhost
-  # gather_facts must be set to true to automatically load the cached facts.
-  gather_facts: true
+  gather_facts: false
   tasks:
-    # The 'gather_facts: true' line handles this automatically.
     - name: Print the retrieved welcome message
       ansible.builtin.debug:
-        msg: "Retrieved message: {{ ansible_facts.welcome_message }}"
+        msg: "Retrieved message: {{ welcome_message_from_workflow }}"
+      delegate_to: localhost
+      run_once: true
