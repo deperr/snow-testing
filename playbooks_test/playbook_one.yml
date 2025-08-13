@@ -2,7 +2,7 @@
 
 - name: Set a variable and save to fact cache
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   tasks:
     - name: Set a dynamic welcome message
       ansible.builtin.set_fact:
