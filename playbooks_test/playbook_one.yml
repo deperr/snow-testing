@@ -1,5 +1,4 @@
 ---
-
 - name: Generate a variable and make it available for AAP workflow
   hosts: localhost
   gather_facts: true

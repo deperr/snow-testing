@@ -5,6 +5,6 @@
   tasks:
     - name: Print the retrieved welcome message
       ansible.builtin.debug:
-        msg: "Retrieved message: {{ welcome_message_from_workflow }}"
+        msg: "Retrieved message: {{ welcome_message }}"
       delegate_to: localhost
       run_once: true
