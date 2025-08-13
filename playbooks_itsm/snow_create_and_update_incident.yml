@@ -1,0 +1,330 @@
+---
+- name: ServiceNow ITSM - Create and Update Incident Workflow
+  hosts: localhost
+  gather_facts: true
+  
+  module_defaults:
+    servicenow.itsm.incident:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+        # Optional OAuth configuration (uncomment if using OAuth)
+        # client_id: "{{ servicenow_client_id | default(omit) }}"
+        # client_secret: "{{ servicenow_client_secret | default(omit) }}"
+    servicenow.itsm.incident_info:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+
+  vars:
+    # Workflow control variables
+    workflow_enabled: "{{ enable_workflow | default(true) | bool }}"
+    auto_update_enabled: "{{ enable_auto_update | default(true) | bool }}"
+    notification_enabled: "{{ enable_notifications | default(false) | bool }}"
+    
+    # Initial incident creation parameters
+    initial_incident:
+      short_description: "{{ incident_short_description | default('Automated incident created via Ansible') }}"
+      description: "{{ incident_description | default('This incident was created automatically and will be updated with additional information') }}"
+      urgency: "{{ incident_urgency | default('medium') }}"
+      impact: "{{ incident_impact | default('medium') }}"
+      caller: "{{ incident_caller | default(servicenow_username) }}"
+      category: "{{ incident_category | default('Software') }}"
+      state: "{{ incident_initial_state | default('new') }}"
+    
+    # Update parameters (applied after creation)
+    incident_updates:
+      state: "{{ incident_update_state | default('in_progress') }}"
+      assignment_group: "{{ incident_assignment_group | default('IT Support') }}"
+      assigned_to: "{{ incident_assigned_to | default(omit) }}"
+      work_notes: "{{ incident_work_notes | default('Incident automatically assigned and updated via Ansible workflow') }}"
+      priority: "{{ incident_update_priority | default(omit) }}"
+
+  tasks:
+    - name: Validate required ServiceNow connection parameters
+      ansible.builtin.assert:
+        that:
+          - servicenow_instance is defined
+          - servicenow_username is defined
+          - servicenow_password is defined
+        fail_msg: "ServiceNow connection parameters (instance, username, password) must be provided"
+        success_msg: "ServiceNow connection parameters validated"
+      tags:
+        - validation
+        - always
+
+    - name: Display workflow configuration
+      ansible.builtin.debug:
+        msg:
+          - "🚀 ServiceNow Incident Workflow Starting"
+          - "========================================"
+          - "Workflow Enabled: {{ workflow_enabled }}"
+          - "Auto-Update Enabled: {{ auto_update_enabled }}"
+          - "Notifications Enabled: {{ notification_enabled }}"
+          - "ServiceNow Instance: {{ servicenow_instance }}"
+          - "Initial State: {{ initial_incident.state }}"
+          - "Target State: {{ incident_updates.state }}"
+          - "Assignment Group: {{ incident_updates.assignment_group }}"
+      when: workflow_enabled
+      tags:
+        - display
+        - workflow
+
+    # STEP 1: Create the initial incident
+    - name: Create initial incident in ServiceNow
+      servicenow.itsm.incident:
+        short_description: "{{ initial_incident.short_description }}"
+        description: "{{ initial_incident.description }}"
+        urgency: "{{ initial_incident.urgency }}"
+        impact: "{{ initial_incident.impact }}"
+        caller: "{{ initial_incident.caller }}"
+        category: "{{ initial_incident.category }}"
+        other:
+          state: "{{ initial_incident.state }}"
+      register: created_incident
+      when: workflow_enabled
+      notify: 
+        - "notify_incident_created"
+      tags:
+        - create
+        - incident
+        - workflow
+
+    - name: Verify incident creation success
+      ansible.builtin.assert:
+        that:
+          - created_incident is succeeded
+          - created_incident.record is defined
+          - created_incident.record.sys_id is defined
+          - created_incident.record.number is defined
+        fail_msg: "Failed to create incident or missing required fields in response"
+        success_msg: "Incident {{ created_incident.record.number }} created successfully"
+      when: workflow_enabled
+      tags:
+        - validation
+        - create
+
+    # STEP 2: Extract and set incident variables for further use
+    - name: Set incident facts from creation response
+      ansible.builtin.set_fact:
+        incident_sys_id: "{{ created_incident.record.sys_id }}"
+        incident_number: "{{ created_incident.record.number }}"
+        incident_url: "https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+        incident_created_on: "{{ created_incident.record.sys_created_on | default(ansible_date_time.iso8601) }}"
+        initial_priority: "{{ created_incident.record.priority }}"
+        initial_state_value: "{{ created_incident.record.state }}"
+      when: 
+        - workflow_enabled
+        - created_incident is succeeded
+      tags:
+        - facts
+        - workflow
+
+    - name: Display created incident details
+      ansible.builtin.debug:
+        msg:
+          - "✅ Incident Created Successfully!"
+          - "================================"
+          - "Number: {{ incident_number }}"
+          - "Sys ID: {{ incident_sys_id }}"
+          - "State: {{ initial_state_value }}"
+          - "Priority: {{ initial_priority }}"
+          - "Created: {{ incident_created_on }}"
+          - "URL: {{ incident_url }}"
+          - ""
+          - "📝 Variables available for updates:"
+          - "  - incident_sys_id: {{ incident_sys_id }}"
+          - "  - incident_number: {{ incident_number }}"
+      when: 
+        - workflow_enabled
+        - created_incident is succeeded
+      tags:
+        - display
+        - create
+
+    # STEP 3: Wait for processing (simulate real-world delay)
+    - name: Wait before applying updates
+      ansible.builtin.pause:
+        seconds: "{{ update_delay_seconds | default(2) }}"
+        prompt: "Waiting {{ update_delay_seconds | default(2) }} seconds before applying updates..."
+      when: 
+        - workflow_enabled
+        - auto_update_enabled
+        - update_delay_seconds | default(2) | int > 0
+      tags:
+        - workflow
+        - timing
+
+    # STEP 4: Update the incident using the extracted variables
+    - name: Update incident with assignment and status changes
+      servicenow.itsm.incident:
+        sys_id: "{{ incident_sys_id }}"  # Using the variable from creation
+        state: present
+        assignment_group: "{{ incident_updates.assignment_group }}"
+        assigned_to: "{{ incident_updates.assigned_to }}"
+        work_notes: |
+          {{ incident_updates.work_notes }}
+          
+          Original Incident: {{ incident_number }}
+          Updated via Ansible workflow at: {{ ansible_date_time.iso8601 }}
+          Previous State: {{ initial_state_value }}
+          New State: {{ incident_updates.state }}
+        other:
+          state: "{{ incident_updates.state }}"
+      register: updated_incident
+      when:
+        - workflow_enabled
+        - auto_update_enabled
+        - incident_sys_id is defined
+      notify:
+        - "notify_incident_updated"
+      tags:
+        - update
+        - incident
+        - workflow
+
+    - name: Verify incident update success
+      ansible.builtin.assert:
+        that:
+          - updated_incident is succeeded
+          - updated_incident.record is defined
+        fail_msg: "Failed to update incident {{ incident_number }}"
+        success_msg: "Incident {{ incident_number }} updated successfully"
+      when:
+        - workflow_enabled
+        - auto_update_enabled
+        - updated_incident is defined
+      tags:
+        - validation
+        - update
+
+    # STEP 5: Set final incident state variables
+    - name: Set final incident facts
+      ansible.builtin.set_fact:
+        final_incident_state: "{{ updated_incident.record.state | default(initial_state_value) }}"
+        final_incident_priority: "{{ updated_incident.record.priority | default(initial_priority) }}"
+        final_assignment_group: "{{ updated_incident.record.assignment_group | default('Unassigned') }}"
+        final_assigned_to: "{{ updated_incident.record.assigned_to | default('Unassigned') }}"
+        final_updated_on: "{{ updated_incident.record.sys_updated_on | default(incident_created_on) }}"
+        workflow_completed_at: "{{ ansible_date_time.iso8601 }}"
+      when:
+        - workflow_enabled
+        - updated_incident is defined
+      tags:
+        - facts
+        - workflow
+
+    # STEP 6: Display comprehensive workflow summary
+    - name: Display workflow completion summary
+      ansible.builtin.debug:
+        msg:
+          - "🎉 ServiceNow Incident Workflow Completed"
+          - "========================================="
+          - ""
+          - "📋 Incident Details:"
+          - "  Number: {{ incident_number }}"
+          - "  Sys ID: {{ incident_sys_id }}"
+          - "  URL: {{ incident_url }}"
+          - ""
+          - "🔄 State Changes:"
+          - "  Initial State: {{ initial_state_value }}"
+          - "  {% if auto_update_enabled and updated_incident is defined %}Final State: {{ final_incident_state }}{% else %}Final State: {{ initial_state_value }} (no updates applied){% endif %}"
+          - ""
+          - "👥 Assignment:"
+          - "  {% if auto_update_enabled and updated_incident is defined %}Assignment Group: {{ final_assignment_group }}{% else %}Assignment Group: Not assigned{% endif %}"
+          - "  {% if auto_update_enabled and updated_incident is defined %}Assigned To: {{ final_assigned_to }}{% else %}Assigned To: Not assigned{% endif %}"
+          - ""
+          - "⏰ Timeline:"
+          - "  Created: {{ incident_created_on }}"
+          - "  {% if auto_update_enabled and updated_incident is defined %}Last Updated: {{ final_updated_on }}{% endif %}"
+          - "  Workflow Completed: {{ workflow_completed_at }}"
+          - ""
+          - "🔧 Variables Created for Further Use:"
+          - "  - incident_sys_id: {{ incident_sys_id }}"
+          - "  - incident_number: {{ incident_number }}"
+          - "  - incident_url: {{ incident_url }}"
+          - "  {% if auto_update_enabled and updated_incident is defined %}- final_incident_state: {{ final_incident_state }}{% endif %}"
+          - "  {% if auto_update_enabled and updated_incident is defined %}- final_assignment_group: {{ final_assignment_group }}{% endif %}"
+      when: workflow_enabled
+      tags:
+        - summary
+        - workflow
+
+    # STEP 7: Optional - Create related records using the incident variables
+    - name: Create related change request (optional)
+      servicenow.itsm.change_request:
+        short_description: "Change request related to incident {{ incident_number }}"
+        description: |
+          This change request is automatically created for incident {{ incident_number }}.
+          
+          Related Incident Details:
+          - Number: {{ incident_number }}
+          - Sys ID: {{ incident_sys_id }}
+          - State: {{ final_incident_state | default(initial_state_value) }}
+          - URL: {{ incident_url }}
+        priority: "{{ incident_updates.priority | default('medium') }}"
+        risk: "medium"
+        impact: "{{ initial_incident.impact }}"
+        type: "normal"
+        category: "Software"
+        requested_by: "{{ servicenow_username }}"
+        assignment_group: "{{ incident_updates.assignment_group }}"
+        other:
+          state: "new"
+      register: related_change_request
+      when:
+        - workflow_enabled
+        - create_related_change_request | default(false) | bool
+        - incident_sys_id is defined
+      tags:
+        - create
+        - change_request
+        - workflow
+
+    - name: Display related change request details
+      ansible.builtin.debug:
+        msg:
+          - "✅ Related Change Request Created"
+          - "================================"
+          - "Number: {{ related_change_request.record.number }}"
+          - "Sys ID: {{ related_change_request.record.sys_id }}"
+          - "Related to Incident: {{ incident_number }}"
+          - "URL: https://{{ servicenow_instance }}/nav_to.do?uri=change_request.do?sys_id={{ related_change_request.record.sys_id }}"
+      when:
+        - create_related_change_request | default(false) | bool
+        - related_change_request is defined
+        - related_change_request is succeeded
+      tags:
+        - display
+        - change_request
+
+  handlers:
+    - name: Send notification on incident creation
+      listen: "notify_incident_created"
+      ansible.builtin.debug:
+        msg: 
+          - "📧 NOTIFICATION: Incident Created"
+          - "Incident {{ created_incident.record.number }} has been created"
+          - "URL: https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+      when: notification_enabled
+
+    - name: Send notification on incident update
+      listen: "notify_incident_updated"
+      ansible.builtin.debug:
+        msg:
+          - "📧 NOTIFICATION: Incident Updated"
+          - "Incident {{ incident_number }} has been updated"
+          - "New State: {{ updated_incident.record.state }}"
+          - "Assignment Group: {{ updated_incident.record.assignment_group }}"
+          - "URL: {{ incident_url }}"
+      when: notification_enabled
+
+    - name: Log workflow completion
+      listen: "workflow_completed"
+      ansible.builtin.debug:
+        msg: 
+          - "📊 WORKFLOW LOG: ServiceNow incident workflow completed successfully"
+          - "Incident: {{ incident_number }} ({{ incident_sys_id }})"
+          - "Completed at: {{ ansible_date_time.iso8601 }}"

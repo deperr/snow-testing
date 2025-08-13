@@ -1,0 +1,245 @@
+---
+- name: ServiceNow ITSM - Master Workflow with Inter-Playbook Variable Passing
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+    # Workflow configuration
+    workflow_id: "{{ ansible_date_time.epoch }}"
+    workflow_name: "ServiceNow_ITSM_Master_Workflow"
+    
+    # Shared variables file for inter-playbook communication
+    shared_vars_file: "/tmp/snow_workflow_{{ workflow_id }}.yml"
+    
+    # Default incident parameters
+    default_incident:
+      short_description: "Master workflow incident"
+      description: "Created via master workflow for demonstration"
+      urgency: "medium"
+      impact: "medium"
+      caller: "{{ servicenow_username }}"
+
+  tasks:
+    # =============================================================
+    # STEP 1: Initialize Workflow and Create Shared Variables
+    # =============================================================
+    
+    - name: Initialize workflow state
+      ansible.builtin.set_fact:
+        workflow_state:
+          id: "{{ workflow_id }}"
+          name: "{{ workflow_name }}"
+          started_at: "{{ ansible_date_time.iso8601 }}"
+          created_incidents: []
+          updated_incidents: []
+          failed_operations: []
+          status: "running"
+      tags:
+        - init
+        - workflow
+
+    - name: Create shared variables file for inter-playbook communication
+      ansible.builtin.copy:
+        content: |
+          ---
+          # Shared variables for ServiceNow workflow {{ workflow_id }}
+          # Generated at: {{ ansible_date_time.iso8601 }}
+          
+          workflow_id: "{{ workflow_id }}"
+          workflow_started_at: "{{ ansible_date_time.iso8601 }}"
+          servicenow_instance: "{{ servicenow_instance }}"
+          servicenow_username: "{{ servicenow_username }}"
+          
+          # Will be populated by sub-playbooks
+          created_incidents: []
+          processing_results: {}
+          
+        dest: "{{ shared_vars_file }}"
+        mode: '0644'
+      tags:
+        - init
+        - shared_vars
+
+    # =============================================================
+    # STEP 2: Execute Creation Sub-Playbook
+    # =============================================================
+    
+    - name: Execute incident creation sub-playbook
+      ansible.builtin.include_tasks: 
+        file: "sub_create_incidents.yml"
+      vars:
+        shared_vars_file_path: "{{ shared_vars_file }}"
+        incident_config: "{{ default_incident }}"
+        create_multiple: "{{ create_multiple_incidents | default(false) | bool }}"
+        incident_count: "{{ incident_creation_count | default(1) | int }}"
+      tags:
+        - create
+        - sub_playbook
+
+    # =============================================================
+    # STEP 3: Load Results from Creation Sub-Playbook
+    # =============================================================
+    
+    - name: Load shared variables after creation
+      ansible.builtin.include_vars:
+        file: "{{ shared_vars_file }}"
+        name: shared_data
+      tags:
+        - load_vars
+        - workflow
+
+    - name: Update workflow state with creation results
+      ansible.builtin.set_fact:
+        workflow_state: >-
+          {{
+            workflow_state | combine({
+              'created_incidents': shared_data.created_incidents | default([]),
+              'creation_completed_at': ansible_date_time.iso8601
+            })
+          }}
+      tags:
+        - workflow
+        - state_update
+
+    - name: Display creation results
+      ansible.builtin.debug:
+        msg:
+          - "✅ Creation Phase Completed"
+          - "=========================="
+          - "Incidents Created: {{ workflow_state.created_incidents | length }}"
+          - "{% for incident in workflow_state.created_incidents %}"
+          - "{{ loop.index }}. {{ incident.number }} ({{ incident.sys_id }})"
+          - "{% endfor %}"
+      when: workflow_state.created_incidents | length > 0
+      tags:
+        - display
+        - workflow
+
+    # =============================================================
+    # STEP 4: Execute Update Sub-Playbook for Each Created Incident
+    # =============================================================
+    
+    - name: Execute update sub-playbook for each created incident
+      ansible.builtin.include_tasks:
+        file: "sub_update_incident.yml"
+      vars:
+        shared_vars_file_path: "{{ shared_vars_file }}"
+        target_incident: "{{ item }}"
+        update_config:
+          assignment_group: "{{ incident_assignment_group | default('IT Support') }}"
+          state: "{{ incident_target_state | default('in_progress') }}"
+          work_notes: "Updated via master workflow {{ workflow_id }} at {{ ansible_date_time.iso8601 }}"
+      loop: "{{ workflow_state.created_incidents }}"
+      loop_control:
+        label: "{{ item.number }}"
+      when: 
+        - workflow_state.created_incidents | length > 0
+        - enable_updates | default(true) | bool
+      tags:
+        - update
+        - sub_playbook
+
+    # =============================================================
+    # STEP 5: Final Workflow Summary and Cleanup
+    # =============================================================
+    
+    - name: Load final shared variables
+      ansible.builtin.include_vars:
+        file: "{{ shared_vars_file }}"
+        name: final_shared_data
+      tags:
+        - load_vars
+        - cleanup
+
+    - name: Create final workflow summary
+      ansible.builtin.set_fact:
+        final_workflow_summary:
+          workflow_id: "{{ workflow_id }}"
+          workflow_name: "{{ workflow_name }}"
+          started_at: "{{ workflow_state.started_at }}"
+          completed_at: "{{ ansible_date_time.iso8601 }}"
+          duration_minutes: >-
+            {{
+              ((ansible_date_time.epoch | int) - 
+               (workflow_state.started_at | to_datetime('%Y-%m-%dT%H:%M:%SZ') | epoch)) / 60 | round(2)
+            }}
+          incidents_created: "{{ final_shared_data.created_incidents | length }}"
+          incidents_updated: "{{ final_shared_data.processing_results.updated | default([]) | length }}"
+          incidents_failed: "{{ final_shared_data.processing_results.failed | default([]) | length }}"
+          success_rate: >-
+            {{
+              (final_shared_data.processing_results.updated | default([]) | length / 
+               (final_shared_data.created_incidents | length) * 100) | round(1)
+              if final_shared_data.created_incidents | length > 0 else 0
+            }}
+          shared_vars_file: "{{ shared_vars_file }}"
+      tags:
+        - summary
+        - workflow
+
+    - name: Display comprehensive workflow summary
+      ansible.builtin.debug:
+        msg:
+          - "🎉 Master Workflow Completed"
+          - "============================"
+          - "Workflow ID: {{ final_workflow_summary.workflow_id }}"
+          - "Duration: {{ final_workflow_summary.duration_minutes }} minutes"
+          - "Success Rate: {{ final_workflow_summary.success_rate }}%"
+          - ""
+          - "📊 Results Summary:"
+          - "  Incidents Created: {{ final_workflow_summary.incidents_created }}"
+          - "  Incidents Updated: {{ final_workflow_summary.incidents_updated }}"
+          - "  Failed Operations: {{ final_workflow_summary.incidents_failed }}"
+          - ""
+          - "📋 Created Incidents:"
+          - "{% for incident in final_shared_data.created_incidents | default([]) %}"
+          - "{{ loop.index }}. {{ incident.number }} ({{ incident.sys_id }})"
+          - "   URL: https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ incident.sys_id }}"
+          - "{% endfor %}"
+          - ""
+          - "📁 Shared Variables File: {{ shared_vars_file }}"
+          - "   (Contains all workflow data for debugging/auditing)"
+      tags:
+        - display
+        - summary
+
+    - name: Clean up shared variables file (optional)
+      ansible.builtin.file:
+        path: "{{ shared_vars_file }}"
+        state: absent
+      when: cleanup_shared_vars | default(false) | bool
+      tags:
+        - cleanup
+
+    - name: Export workflow results for external use
+      ansible.builtin.copy:
+        content: |
+          # ServiceNow Workflow Results
+          # Generated: {{ ansible_date_time.iso8601 }}
+          
+          export SNOW_WORKFLOW_ID="{{ final_workflow_summary.workflow_id }}"
+          export SNOW_INCIDENTS_CREATED="{{ final_workflow_summary.incidents_created }}"
+          export SNOW_SUCCESS_RATE="{{ final_workflow_summary.success_rate }}"
+          
+          # Created incident sys_ids (space-separated)
+          export SNOW_INCIDENT_SYS_IDS="{% for incident in final_shared_data.created_incidents | default([]) %}{{ incident.sys_id }}{% if not loop.last %} {% endif %}{% endfor %}"
+          
+          # Created incident numbers (space-separated)
+          export SNOW_INCIDENT_NUMBERS="{% for incident in final_shared_data.created_incidents | default([]) %}{{ incident.number }}{% if not loop.last %} {% endif %}{% endfor %}"
+          
+        dest: "/tmp/snow_workflow_{{ workflow_id }}_export.sh"
+        mode: '0755'
+      when: export_results | default(false) | bool
+      tags:
+        - export
+        - results
+
+---
+# Sub-playbook for creating incidents
+- name: Sub-playbook - Create ServiceNow Incidents
+  ansible.builtin.import_playbook: /dev/null
+  when: false  # This is a placeholder - actual sub-playbooks would be separate files
+
+# The following would be in separate files:
+# - sub_create_incidents.yml
+# - sub_update_incident.yml

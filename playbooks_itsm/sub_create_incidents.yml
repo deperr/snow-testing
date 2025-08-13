@@ -1,0 +1,61 @@
+---
+# Sub-playbook: Create ServiceNow Incidents
+# This file demonstrates how to create incidents and pass variables back to parent workflow
+
+- name: Create ServiceNow incidents and update shared variables
+  servicenow.itsm.incident:
+    short_description: "{{ incident_config.short_description }}"
+    description: "{{ incident_config.description }}"
+    urgency: "{{ incident_config.urgency }}"
+    impact: "{{ incident_config.impact }}"
+    caller: "{{ incident_config.caller }}"
+    other:
+      state: "new"
+  register: created_incident
+  tags:
+    - create_incident
+
+- name: Load current shared variables
+  ansible.builtin.include_vars:
+    file: "{{ shared_vars_file_path }}"
+    name: current_shared_data
+  tags:
+    - load_shared_vars
+
+- name: Add created incident to shared variables
+  ansible.builtin.set_fact:
+    updated_shared_data: >-
+      {{
+        current_shared_data | combine({
+          'created_incidents': current_shared_data.created_incidents + [{
+            'sys_id': created_incident.record.sys_id,
+            'number': created_incident.record.number,
+            'state': created_incident.record.state,
+            'priority': created_incident.record.priority,
+            'created_at': ansible_date_time.iso8601,
+            'url': 'https://' + servicenow_instance + '/nav_to.do?uri=incident.do?sys_id=' + created_incident.record.sys_id
+          }]
+        })
+      }}
+  when: created_incident is succeeded
+  tags:
+    - update_shared_vars
+
+- name: Update shared variables file
+  ansible.builtin.copy:
+    content: "{{ updated_shared_data | to_nice_yaml }}"
+    dest: "{{ shared_vars_file_path }}"
+    mode: '0644'
+  when: updated_shared_data is defined
+  tags:
+    - save_shared_vars
+
+- name: Display creation result
+  ansible.builtin.debug:
+    msg:
+      - "✅ Incident Created: {{ created_incident.record.number }}"
+      - "Sys ID: {{ created_incident.record.sys_id }}"
+      - "Added to shared variables file: {{ shared_vars_file_path }}"
+  when: created_incident is succeeded
+  tags:
+    - display_result

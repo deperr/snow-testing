@@ -1,0 +1,17 @@
+---
+- name: Retrieve a variable from the fact cache and use it
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Load the welcome_message fact from the cache
+      ansible.builtin.fact_cache:
+        fact: welcome_message
+        state: present
+        load: true
+        force: true
+      delegate_to: localhost
+      run_once: true
+
+    - name: Print the retrieved welcome message
+      ansible.builtin.debug:
+        msg: "Retrieved message: {{ ansible_facts.welcome_message }}"

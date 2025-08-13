@@ -1,0 +1,16 @@
+---
+
+- name: Set a variable and save to fact cache
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Set a dynamic welcome message
+      ansible.builtin.set_fact:
+        welcome_message: "Hello from Playbook 1! The current timestamp is {{ ansible_date_time.iso8601 }}"
+
+    - name: Save the new fact to the cache
+      ansible.builtin.fact_cache:
+        fact: welcome_message
+        value: "{{ welcome_message }}"
+      delegate_to: localhost
+      run_once: true

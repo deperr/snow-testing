@@ -1,0 +1,525 @@
+---
+- name: ServiceNow ITSM - Variable Passing Patterns and Examples
+  hosts: localhost
+  gather_facts: true
+  
+  module_defaults:
+    servicenow.itsm.incident:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+    servicenow.itsm.incident_info:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+
+  vars:
+    # Example 1: Using complex data structures for batch operations
+    incident_batch:
+      - name: "web_server_down"
+        short_description: "Web server appears to be down"
+        urgency: "high"
+        impact: "high"
+        category: "Infrastructure"
+      - name: "database_slow"
+        short_description: "Database queries running slowly"
+        urgency: "medium"
+        impact: "medium"
+        category: "Database"
+      - name: "email_issues"
+        short_description: "Email delivery problems reported"
+        urgency: "low"
+        impact: "low"
+        category: "Email"
+
+    # Example 2: Update workflows with conditional logic
+    update_workflows:
+      escalation:
+        condition: "{{ incident_age_hours | default(0) | int > 4 }}"
+        updates:
+          urgency: "high"
+          assignment_group: "L2 Support"
+          work_notes: "Escalated due to age ({{ incident_age_hours | default(0) }} hours)"
+      
+      resolution:
+        condition: "{{ incident_resolution_provided | default(false) | bool }}"
+        updates:
+          state: "resolved"
+          close_code: "{{ resolution_close_code | default('Solved (Work Around)') }}"
+          close_notes: "{{ resolution_notes | default('Issue resolved via automated workflow') }}"
+      
+      assignment:
+        condition: "{{ auto_assign_enabled | default(true) | bool }}"
+        updates:
+          assignment_group: "{{ target_assignment_group | default('IT Support') }}"
+          assigned_to: "{{ target_assignee | default(omit) }}"
+
+  tasks:
+    # =============================================================
+    # PATTERN 1: Creating Multiple Incidents and Storing Results
+    # =============================================================
+    
+    - name: "PATTERN 1: Create multiple incidents and collect their details"
+      block:
+        - name: Create incidents from batch configuration
+          servicenow.itsm.incident:
+            short_description: "{{ item.short_description }}"
+            description: "Batch incident created for {{ item.name }} via Ansible automation"
+            urgency: "{{ item.urgency }}"
+            impact: "{{ item.impact }}"
+            category: "{{ item.category }}"
+            caller: "{{ servicenow_username }}"
+            other:
+              state: "new"
+          register: batch_incidents
+          loop: "{{ incident_batch }}"
+          loop_control:
+            label: "{{ item.name }}"
+          when: create_batch_incidents | default(false) | bool
+          tags:
+            - batch_create
+            - pattern1
+
+        - name: Extract incident details into usable variables
+          ansible.builtin.set_fact:
+            created_incident_details: >-
+              {{
+                batch_incidents.results | default([]) | map('dict2items') | 
+                map('selectattr', 'key', 'equalto', 'record') | 
+                map('map', attribute='value') | 
+                list | flatten |
+                map('combine', {'loop_index': range(batch_incidents.results | length) | list}) |
+                list
+              }}
+          when: 
+            - create_batch_incidents | default(false) | bool
+            - batch_incidents is defined
+            - batch_incidents.results is defined
+          tags:
+            - batch_create
+            - pattern1
+
+        - name: Display batch creation results with variables
+          ansible.builtin.debug:
+            msg:
+              - "📦 Batch Incident Creation Results"
+              - "=================================="
+              - "Total Created: {{ created_incident_details | length }}"
+              - ""
+              - "{% for incident in created_incident_details %}"
+              - "{{ loop.index }}. {{ incident.number }} ({{ incident.sys_id }})"
+              - "   State: {{ incident.state }}"
+              - "   Priority: {{ incident.priority }}"
+              - "   Variable: incident_{{ loop.index0 }}_sys_id = {{ incident.sys_id }}"
+              - "   Variable: incident_{{ loop.index0 }}_number = {{ incident.number }}"
+              - "{% endfor %}"
+          when:
+            - create_batch_incidents | default(false) | bool
+            - created_incident_details is defined
+          tags:
+            - display
+            - pattern1
+
+    # =============================================================
+    # PATTERN 2: Conditional Updates Based on Incident State
+    # =============================================================
+
+    - name: "PATTERN 2: Apply conditional updates to existing incident"
+      block:
+        - name: Get existing incident for conditional updates
+          servicenow.itsm.incident_info:
+            sys_id: "{{ target_incident_sys_id }}"
+          register: target_incident_info
+          when: 
+            - apply_conditional_updates | default(false) | bool
+            - target_incident_sys_id is defined
+          tags:
+            - conditional_updates
+            - pattern2
+
+        - name: Set incident context variables
+          ansible.builtin.set_fact:
+            current_incident: "{{ target_incident_info.records[0] | default({}) }}"
+            incident_age_hours: >-
+              {{
+                ((ansible_date_time.epoch | int) - 
+                 (target_incident_info.records[0].sys_created_on | to_datetime('%Y-%m-%d %H:%M:%S') | epoch)) / 3600
+                if target_incident_info.records | length > 0 else 0
+              }}
+          when:
+            - apply_conditional_updates | default(false) | bool
+            - target_incident_info is defined
+            - target_incident_info.records | length > 0
+          tags:
+            - conditional_updates
+            - pattern2
+
+        - name: Apply escalation workflow if conditions met
+          servicenow.itsm.incident:
+            sys_id: "{{ current_incident.sys_id }}"
+            urgency: "{{ update_workflows.escalation.updates.urgency }}"
+            assignment_group: "{{ update_workflows.escalation.updates.assignment_group }}"
+            work_notes: "{{ update_workflows.escalation.updates.work_notes }}"
+          register: escalation_result
+          when:
+            - apply_conditional_updates | default(false) | bool
+            - current_incident is defined
+            - current_incident.sys_id is defined
+            - update_workflows.escalation.condition | bool
+          tags:
+            - conditional_updates
+            - escalation
+            - pattern2
+
+        - name: Apply resolution workflow if conditions met
+          servicenow.itsm.incident:
+            sys_id: "{{ current_incident.sys_id }}"
+            close_code: "{{ update_workflows.resolution.updates.close_code }}"
+            close_notes: "{{ update_workflows.resolution.updates.close_notes }}"
+            other:
+              state: "{{ update_workflows.resolution.updates.state }}"
+          register: resolution_result
+          when:
+            - apply_conditional_updates | default(false) | bool
+            - current_incident is defined
+            - current_incident.sys_id is defined
+            - update_workflows.resolution.condition | bool
+          tags:
+            - conditional_updates
+            - resolution
+            - pattern2
+
+        - name: Apply assignment workflow if conditions met
+          servicenow.itsm.incident:
+            sys_id: "{{ current_incident.sys_id }}"
+            assignment_group: "{{ update_workflows.assignment.updates.assignment_group }}"
+            assigned_to: "{{ update_workflows.assignment.updates.assigned_to }}"
+          register: assignment_result
+          when:
+            - apply_conditional_updates | default(false) | bool
+            - current_incident is defined
+            - current_incident.sys_id is defined
+            - update_workflows.assignment.condition | bool
+          tags:
+            - conditional_updates
+            - assignment
+            - pattern2
+
+        - name: Display conditional update results
+          ansible.builtin.debug:
+            msg:
+              - "🔄 Conditional Update Results for {{ current_incident.number | default('N/A') }}"
+              - "=============================================================="
+              - "Incident Age: {{ incident_age_hours | round(2) }} hours"
+              - ""
+              - "Applied Updates:"
+              - "{% if escalation_result is defined and escalation_result is succeeded %}✅ Escalation: Incident escalated to {{ update_workflows.escalation.updates.assignment_group }}{% endif %}"
+              - "{% if resolution_result is defined and resolution_result is succeeded %}✅ Resolution: Incident marked as {{ update_workflows.resolution.updates.state }}{% endif %}"
+              - "{% if assignment_result is defined and assignment_result is succeeded %}✅ Assignment: Assigned to {{ update_workflows.assignment.updates.assignment_group }}{% endif %}"
+              - ""
+              - "Available Variables:"
+              - "- current_incident.sys_id: {{ current_incident.sys_id | default('N/A') }}"
+              - "- current_incident.number: {{ current_incident.number | default('N/A') }}"
+              - "- incident_age_hours: {{ incident_age_hours | default('N/A') }}"
+          when:
+            - apply_conditional_updates | default(false) | bool
+            - current_incident is defined
+          tags:
+            - display
+            - pattern2
+
+    # =============================================================
+    # PATTERN 3: Using External Variables and Dynamic Updates
+    # =============================================================
+
+    - name: "PATTERN 3: Dynamic incident updates using external variables"
+      block:
+        - name: Load external incident configuration
+          ansible.builtin.set_fact:
+            dynamic_incident_config:
+              sys_id: "{{ external_incident_sys_id | default('') }}"
+              updates: "{{ external_incident_updates | default({}) }}"
+              metadata:
+                source: "{{ external_data_source | default('manual') }}"
+                timestamp: "{{ ansible_date_time.iso8601 }}"
+                operator: "{{ servicenow_username }}"
+          when: use_external_variables | default(false) | bool
+          tags:
+            - external_variables
+            - pattern3
+
+        - name: Apply external configuration updates
+          servicenow.itsm.incident:
+            sys_id: "{{ dynamic_incident_config.sys_id }}"
+            short_description: "{{ dynamic_incident_config.updates.short_description | default(omit) }}"
+            description: "{{ dynamic_incident_config.updates.description | default(omit) }}"
+            urgency: "{{ dynamic_incident_config.updates.urgency | default(omit) }}"
+            impact: "{{ dynamic_incident_config.updates.impact | default(omit) }}"
+            assignment_group: "{{ dynamic_incident_config.updates.assignment_group | default(omit) }}"
+            assigned_to: "{{ dynamic_incident_config.updates.assigned_to | default(omit) }}"
+            work_notes: |
+              Dynamic update applied via {{ dynamic_incident_config.metadata.source }}
+              Timestamp: {{ dynamic_incident_config.metadata.timestamp }}
+              Operator: {{ dynamic_incident_config.metadata.operator }}
+              
+              {% if dynamic_incident_config.updates.work_notes is defined %}
+              Additional Notes:
+              {{ dynamic_incident_config.updates.work_notes }}
+              {% endif %}
+            other: "{{ dynamic_incident_config.updates.other | default({}) }}"
+          register: dynamic_update_result
+          when:
+            - use_external_variables | default(false) | bool
+            - dynamic_incident_config.sys_id != ''
+          tags:
+            - external_variables
+            - pattern3
+
+        - name: Set result variables for external consumption
+          ansible.builtin.set_fact:
+            dynamic_update_summary:
+              incident_sys_id: "{{ dynamic_incident_config.sys_id }}"
+              incident_number: "{{ dynamic_update_result.record.number | default('N/A') }}"
+              updates_applied: "{{ dynamic_incident_config.updates.keys() | list }}"
+              success: "{{ dynamic_update_result is succeeded }}"
+              timestamp: "{{ dynamic_incident_config.metadata.timestamp }}"
+              result_url: "https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ dynamic_incident_config.sys_id }}"
+          when:
+            - use_external_variables | default(false) | bool
+            - dynamic_update_result is defined
+          tags:
+            - external_variables
+            - pattern3
+
+    # =============================================================
+    # PATTERN 4: Incident Lifecycle Management with State Tracking
+    # =============================================================
+
+    - name: "PATTERN 4: Complete incident lifecycle with state tracking"
+      block:
+        - name: Initialize incident lifecycle tracking
+          ansible.builtin.set_fact:
+            incident_lifecycle:
+              states: []
+              transitions: []
+              current_state: "new"
+              start_time: "{{ ansible_date_time.iso8601 }}"
+          when: track_incident_lifecycle | default(false) | bool
+          tags:
+            - lifecycle
+            - pattern4
+
+        - name: Create incident for lifecycle tracking
+          servicenow.itsm.incident:
+            short_description: "{{ lifecycle_incident_description | default('Lifecycle tracked incident') }}"
+            description: "This incident demonstrates lifecycle tracking with state management"
+            urgency: "{{ lifecycle_urgency | default('medium') }}"
+            impact: "{{ lifecycle_impact | default('medium') }}"
+            caller: "{{ servicenow_username }}"
+            other:
+              state: "new"
+          register: lifecycle_incident
+          when: track_incident_lifecycle | default(false) | bool
+          tags:
+            - lifecycle
+            - create
+            - pattern4
+
+        - name: Track initial state
+          ansible.builtin.set_fact:
+            incident_lifecycle: >-
+              {{
+                incident_lifecycle | combine({
+                  'incident_sys_id': lifecycle_incident.record.sys_id,
+                  'incident_number': lifecycle_incident.record.number,
+                  'states': incident_lifecycle.states + [{
+                    'state': 'new',
+                    'timestamp': ansible_date_time.iso8601,
+                    'priority': lifecycle_incident.record.priority
+                  }]
+                })
+              }}
+          when:
+            - track_incident_lifecycle | default(false) | bool
+            - lifecycle_incident is succeeded
+          tags:
+            - lifecycle
+            - pattern4
+
+        - name: Transition to in_progress state
+          servicenow.itsm.incident:
+            sys_id: "{{ incident_lifecycle.incident_sys_id }}"
+            work_notes: "Incident moved to in_progress state at {{ ansible_date_time.iso8601 }}"
+            other:
+              state: "in_progress"
+          register: lifecycle_progress
+          when:
+            - track_incident_lifecycle | default(false) | bool
+            - incident_lifecycle.incident_sys_id is defined
+          tags:
+            - lifecycle
+            - transition
+            - pattern4
+
+        - name: Track progress state
+          ansible.builtin.set_fact:
+            incident_lifecycle: >-
+              {{
+                incident_lifecycle | combine({
+                  'current_state': 'in_progress',
+                  'states': incident_lifecycle.states + [{
+                    'state': 'in_progress',
+                    'timestamp': ansible_date_time.iso8601,
+                    'priority': lifecycle_progress.record.priority
+                  }],
+                  'transitions': incident_lifecycle.transitions + [{
+                    'from': 'new',
+                    'to': 'in_progress',
+                    'timestamp': ansible_date_time.iso8601
+                  }]
+                })
+              }}
+          when:
+            - track_incident_lifecycle | default(false) | bool
+            - lifecycle_progress is succeeded
+          tags:
+            - lifecycle
+            - pattern4
+
+        - name: Resolve incident based on conditions
+          servicenow.itsm.incident:
+            sys_id: "{{ incident_lifecycle.incident_sys_id }}"
+            close_code: "{{ lifecycle_close_code | default('Solved (Work Around)') }}"
+            close_notes: "{{ lifecycle_close_notes | default('Automatically resolved via lifecycle workflow') }}"
+            work_notes: "Incident resolved at {{ ansible_date_time.iso8601 }}"
+            other:
+              state: "resolved"
+          register: lifecycle_resolved
+          when:
+            - track_incident_lifecycle | default(false) | bool
+            - auto_resolve_lifecycle | default(true) | bool
+            - incident_lifecycle.incident_sys_id is defined
+          tags:
+            - lifecycle
+            - resolution
+            - pattern4
+
+        - name: Track final state and create summary
+          ansible.builtin.set_fact:
+            incident_lifecycle: >-
+              {{
+                incident_lifecycle | combine({
+                  'current_state': 'resolved',
+                  'end_time': ansible_date_time.iso8601,
+                  'states': incident_lifecycle.states + [{
+                    'state': 'resolved',
+                    'timestamp': ansible_date_time.iso8601,
+                    'priority': lifecycle_resolved.record.priority,
+                    'close_code': lifecycle_resolved.record.close_code
+                  }],
+                  'transitions': incident_lifecycle.transitions + [{
+                    'from': 'in_progress',
+                    'to': 'resolved',
+                    'timestamp': ansible_date_time.iso8601
+                  }]
+                })
+              }}
+            lifecycle_summary:
+              incident_number: "{{ incident_lifecycle.incident_number }}"
+              total_states: "{{ incident_lifecycle.states | length + 1 }}"
+              total_transitions: "{{ incident_lifecycle.transitions | length + 1 }}"
+              duration_minutes: >-
+                {{
+                  ((ansible_date_time.epoch | int) - 
+                   (incident_lifecycle.start_time | to_datetime('%Y-%m-%dT%H:%M:%SZ') | epoch)) / 60 | round(2)
+                }}
+              final_state: "resolved"
+          when:
+            - track_incident_lifecycle | default(false) | bool
+            - auto_resolve_lifecycle | default(true) | bool
+            - lifecycle_resolved is succeeded
+          tags:
+            - lifecycle
+            - pattern4
+
+        - name: Display lifecycle tracking results
+          ansible.builtin.debug:
+            msg:
+              - "📊 Incident Lifecycle Summary"
+              - "============================="
+              - "Incident: {{ lifecycle_summary.incident_number | default('N/A') }}"
+              - "Duration: {{ lifecycle_summary.duration_minutes | default('N/A') }} minutes"
+              - "States Tracked: {{ lifecycle_summary.total_states | default('N/A') }}"
+              - "Transitions: {{ lifecycle_summary.total_transitions | default('N/A') }}"
+              - ""
+              - "State History:"
+              - "{% for state in incident_lifecycle.states | default([]) %}"
+              - "{{ loop.index }}. {{ state.state | upper }} ({{ state.timestamp }})"
+              - "   Priority: {{ state.priority | default('N/A') }}"
+              - "{% if state.close_code is defined %}   Close Code: {{ state.close_code }}{% endif %}"
+              - "{% endfor %}"
+              - ""
+              - "Transition History:"
+              - "{% for transition in incident_lifecycle.transitions | default([]) %}"
+              - "{{ loop.index }}. {{ transition.from }} → {{ transition.to }} ({{ transition.timestamp }})"
+              - "{% endfor %}"
+              - ""
+              - "Available Variables:"
+              - "- incident_lifecycle.incident_sys_id: {{ incident_lifecycle.incident_sys_id | default('N/A') }}"
+              - "- incident_lifecycle.incident_number: {{ incident_lifecycle.incident_number | default('N/A') }}"
+              - "- incident_lifecycle.current_state: {{ incident_lifecycle.current_state | default('N/A') }}"
+              - "- lifecycle_summary: {{ lifecycle_summary | default('N/A') }}"
+          when:
+            - track_incident_lifecycle | default(false) | bool
+            - incident_lifecycle is defined
+          tags:
+            - display
+            - lifecycle
+            - pattern4
+
+    # =============================================================
+    # FINAL SUMMARY: All Created Variables and Usage Examples
+    # =============================================================
+
+    - name: Display comprehensive variable usage guide
+      ansible.builtin.debug:
+        msg:
+          - "🔧 Variable Passing Patterns Summary"
+          - "===================================="
+          - ""
+          - "PATTERN 1 - Batch Operations:"
+          - "  Variables: created_incident_details (list of incident objects)"
+          - "  Usage: Access via created_incident_details[0].sys_id for first incident"
+          - "  Example: Loop over created_incident_details for bulk updates"
+          - ""
+          - "PATTERN 2 - Conditional Logic:"
+          - "  Variables: current_incident, incident_age_hours"
+          - "  Usage: Conditional updates based on incident properties"
+          - "  Example: Escalate if incident_age_hours > 4"
+          - ""
+          - "PATTERN 3 - External Data:"
+          - "  Variables: dynamic_incident_config, dynamic_update_summary"
+          - "  Usage: Apply updates from external sources (API, files, etc.)"
+          - "  Example: Read incident updates from JSON file or REST API"
+          - ""
+          - "PATTERN 4 - Lifecycle Tracking:"
+          - "  Variables: incident_lifecycle, lifecycle_summary"
+          - "  Usage: Track complete incident workflow with state history"
+          - "  Example: Generate reports on incident processing times"
+          - ""
+          - "COMMON VARIABLES (Available in all patterns):"
+          - "  - ansible_date_time.iso8601: Current timestamp"
+          - "  - servicenow_username: Current user"
+          - "  - servicenow_instance: ServiceNow instance URL"
+          - ""
+          - "NEXT STEPS:"
+          - "  1. Use 'register' to capture task results"
+          - "  2. Use 'set_fact' to create reusable variables"
+          - "  3. Use 'when' conditions with variables for logic"
+          - "  4. Pass variables between playbooks using extra_vars"
+          - "  5. Store variables in group_vars/host_vars for persistence"
+      tags:
+        - summary
+        - documentation
