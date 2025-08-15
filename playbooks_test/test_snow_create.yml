@@ -2,7 +2,7 @@
 
 - name: ServiceNow ITSM - Create Incidents
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   
   module_defaults:
     servicenow.itsm.incident:
