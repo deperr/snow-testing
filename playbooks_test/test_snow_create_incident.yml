@@ -54,6 +54,15 @@
           - "URL: {{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
 
     - name: Set incident facts from creation response
+      ansible.builtin.set_fact:
+        incident_sys_id: "{{ created_incident.record.sys_id }}"
+        incident_number: "{{ created_incident.record.number }}"
+        incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+        incident_created_on: "{{ created_incident.record.sys_created_on | default(ansible_date_time.iso8601) }}"
+        initial_priority: "{{ created_incident.record.priority }}"
+        initial_state_value: "{{ created_incident.record.state }}"
+
+    - name: Persist the welcome message for the AAP workflow
       delegate_to: localhost
       run_once: true
       ansible.builtin.set_stats:
@@ -76,9 +85,3 @@
           - "{% if created_problem is defined and created_problem is succeeded %}✅ Problem: {{ created_problem.record.number }}{% endif %}"
           - "🕐 Created at: {{ ansible_date_time.iso8601 }}"
           - "👤 Created by: {{ servicenow_username }}"
-
-  handlers:
-    - name: Send notification on ticket creation
-      listen: "notify_ticket_created"
-      ansible.builtin.debug:
-        msg: "Notification: New ServiceNow tickets have been created and are ready for processing"
