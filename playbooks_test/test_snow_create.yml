@@ -54,6 +54,8 @@
           - "URL: {{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
 
     - name: Set incident stats for workflow use
+      delegate_to: localhost
+      run_once: true
       ansible.builtin.set_stats:
         data:
           incident_sys_id: "{{ created_incident.record.sys_id }}"
