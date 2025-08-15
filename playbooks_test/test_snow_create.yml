@@ -1,6 +1,6 @@
 ---
 
-- name: TEST TEST ServiceNow ITSM - Create Incidents
+- name: ServiceNow ITSM - Create Incidents
   hosts: localhost
   gather_facts: false
   
@@ -20,7 +20,7 @@
         # client_secret: "{{ servicenow_client_secret | default(omit) }}"
 
   tasks:
-    - name: [TEST]Create incident ticket in ServiceNow
+    - name: Create incident ticket in ServiceNow
       register: created_incident
       when: create_incident | default(true) | bool
       tags:
@@ -58,7 +58,10 @@
       run_once: true
       ansible.builtin.set_fact:
         incident_sys_id: "{{ created_incident.record.sys_id }}"
-
+        incident_number: "{{ created_incident.record.number }}"
+        incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+        incident_created_timestamp: "{{ ansible_date_time.iso8601 }}"
+        incident_initial_state: "{{ created_incident.record.state }}"
 
     - name: Set incident stats for workflow use
       delegate_to: localhost
@@ -66,6 +69,11 @@
       ansible.builtin.set_stats:
         data:
           incident_sys_id: "{{ created_incident.record.sys_id }}"
+          incident_number: "{{ created_incident.record.number }}"
+          incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+          incident_created_timestamp: "{{ ansible_date_time.iso8601 }}"
+          incident_initial_state: "{{ created_incident.record.state }}"
+        aggregate: false
 
     - name: Display creation summary
       tags:
