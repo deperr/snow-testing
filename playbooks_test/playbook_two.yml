@@ -4,7 +4,7 @@
   gather_facts: false
   tasks:
     - name: Print the retrieved welcome message
-      ansible.builtin.debug:
-        msg: "Retrieved message: {{ welcome_message }}"
       delegate_to: localhost
       run_once: true
+      ansible.builtin.debug:
+        msg: "Retrieved message: {{ welcome_message }}"

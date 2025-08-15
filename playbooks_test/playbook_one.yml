@@ -8,9 +8,8 @@
         welcome_message: "Hello from Playbook 1! The current timestamp is {{ ansible_date_time.iso8601 }}"
 
     - name: Persist the welcome message for the AAP workflow
-      # set_stats is the reliable way to make a variable available to a workflow.
+      delegate_to: localhost
+      run_once: true
       ansible.builtin.set_stats:
         data:
           welcome_message: "{{ welcome_message }}"
-      delegate_to: localhost
-      run_once: true
