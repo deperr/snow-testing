@@ -7,8 +7,6 @@
   tasks:
 
     - name: Print the retrieved variables
-      delegate_to: localhost
-      run_once: true
       ansible.builtin.debug:
         msg:
           - "Sys ID: {{ incident_sys_id }}"
