@@ -1,0 +1,22 @@
+---
+
+- name: Use a variable passed via AAP workflow
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: Print the retrieved variables
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.debug:
+        msg:
+          - "Sys ID: {{ incident_sys_id }}"
+          - "Number: {{ incident_number }}"
+          - "URL: {{ incident_url }}"
+          - "Created Timestamp: {{ incident_created_timestamp }}"
+          - "Initial State: {{ incident_initial_state }}"
+          - "Servicenow Instance: {{ servicenow_instance }}"
+          - "Workflow Timestamp: {{ workflow_timestamp }}"
+          - "Workflow Enabled: {{ workflow_enabled }}"
+          - "Auto-Update Enabled: {{ auto_update_enabled }}"
