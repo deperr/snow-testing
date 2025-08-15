@@ -1,5 +1,6 @@
 ---
-- name: ServiceNow ITSM - Update Existing Incidents
+
+- name: ServiceNow ITSM - Update Incidents
   hosts: localhost
   gather_facts: false
   
@@ -9,17 +10,11 @@
         host: "{{ servicenow_instance }}"
         username: "{{ servicenow_username }}"
         password: "{{ servicenow_password }}"
-        # Optional OAuth configuration (uncomment if using OAuth)
-        # client_id: "{{ servicenow_client_id | default(omit) }}"
-        # client_secret: "{{ servicenow_client_secret | default(omit) }}"
     servicenow.itsm.incident_info:
       instance:
         host: "{{ servicenow_instance }}"
         username: "{{ servicenow_username }}"
         password: "{{ servicenow_password }}"
-        # Optional OAuth configuration (uncomment if using OAuth)
-        # client_id: "{{ servicenow_client_id | default(omit) }}"
-        # client_secret: "{{ servicenow_client_secret | default(omit) }}"
 
   tasks:
     - name: Validate required parameters
@@ -156,7 +151,7 @@
           - "Assigned to: {{ updated_incident.record.assigned_to | default('Unassigned') }}"
           - "Assignment Group: {{ updated_incident.record.assignment_group | default('None') }}"
           - "Last Updated: {{ updated_incident.record.sys_updated_on }}"
-          - "🔗 URL: https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident.record.sys_id }}"
+          - "URL: {{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident.record.sys_id }}"
       when: 
         - update_incident | default(true) | bool
         - updated_incident is succeeded
