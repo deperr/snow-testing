@@ -55,6 +55,7 @@
 
     - name: Set incident facts from creation response
       ansible.builtin.set_fact:
+        cacheable: true
         incident_sys_id: "{{ created_incident.record.sys_id }}"
         incident_number: "{{ created_incident.record.number }}"
         incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"

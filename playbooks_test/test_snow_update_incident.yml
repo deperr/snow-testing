@@ -18,11 +18,14 @@
 
   tasks:
 
-    - name: Print the retrieved welcome message
+    - name: Get the information of the incident
       delegate_to: localhost
       run_once: true
       ansible.builtin.debug:
-        msg: "Retrieved message: {{ incident_sys_id }}"
+        msg:
+          - "Incident Sys ID: {{ incident_sys_id }}"
+          - "Incident Number: {{ incident_number }}"
+
   
   #   - name: Validate required parameters
   #     ansible.builtin.assert:
