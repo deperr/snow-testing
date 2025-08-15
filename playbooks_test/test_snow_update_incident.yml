@@ -61,20 +61,36 @@
             - update
 
     - name: Set current incident facts
-      ansible.builtin.set_fact:
-        current_incident: >-
-          {%- if current_incident_by_number is defined and current_incident_by_number.records | length > 0 -%}
-            {{ current_incident_by_number.records[0] }}
-          {%- elif current_incident_by_sysid is defined and current_incident_by_sysid.records | length > 0 -%}
-            {{ current_incident_by_sysid.records[0] }}
-          {%- elif current_incident_by_query is defined and current_incident_by_query.records | length > 0 -%}
-            {{ current_incident_by_query.records[0] }}
-          {%- else -%}
-            {}
-          {%- endif -%}
-      tags:
-        - lookup
-        - update
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.set_stats:
+        data:
+          current_incident: >-
+            {%- if current_incident_by_number is defined and current_incident_by_number.records | length > 0 -%}
+              {{ current_incident_by_number.records[0] }}
+            {%- elif current_incident_by_sysid is defined and current_incident_by_sysid.records | length > 0 -%}
+              {{ current_incident_by_sysid.records[0] }}
+            {%- elif current_incident_by_query is defined and current_incident_by_query.records | length > 0 -%}
+              {{ current_incident_by_query.records[0] }}
+            {%- else -%}
+              {}
+            {%- endif -%}
+
+    # - name: Set current incident facts
+    #   ansible.builtin.set_fact:
+    #     current_incident: >-
+    #       {%- if current_incident_by_number is defined and current_incident_by_number.records | length > 0 -%}
+    #         {{ current_incident_by_number.records[0] }}
+    #       {%- elif current_incident_by_sysid is defined and current_incident_by_sysid.records | length > 0 -%}
+    #         {{ current_incident_by_sysid.records[0] }}
+    #       {%- elif current_incident_by_query is defined and current_incident_by_query.records | length > 0 -%}
+    #         {{ current_incident_by_query.records[0] }}
+    #       {%- else -%}
+    #         {}
+    #       {%- endif -%}
+    #   tags:
+    #     - lookup
+    #     - update
 
     - name: Verify incident was found
       ansible.builtin.assert:
