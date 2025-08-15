@@ -2,7 +2,7 @@
 
 - name: Use variables passed via AAP workflow
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
 
   tasks:
     - name: Display all received workflow variables
