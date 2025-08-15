@@ -3,9 +3,10 @@
 - name: Mimic ServiceNow ticket details
   hosts: localhost
   connection: local
-  gather_facts: true
+  gather_facts: false
   
   tasks:
+
     - name: Define example ServiceNow variables
       delegate_to: localhost
       run_once: true
