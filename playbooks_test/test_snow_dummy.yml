@@ -15,6 +15,17 @@
         incident_assigned_to: 'Ansible Automation'
         servicenow_instance: 'https://dev12345.service-now.com'
 
+    - name: Set workflow variables for AAP 2.5
+      ansible.builtin.set_stats:
+        data:
+          incident_number: "{{ incident_number }}"
+          incident_sys_id: "{{ incident_sys_id }}"
+          incident_state: "{{ incident_state }}"
+          incident_priority: "{{ incident_priority }}"
+          incident_assigned_to: "{{ incident_assigned_to }}"
+          servicenow_instance: "{{ servicenow_instance }}"
+        aggregate: false
+
     - name: Display mock incident details
       ansible.builtin.debug:
         msg:
@@ -25,3 +36,15 @@
           - "Priority: {{ incident_priority }}"
           - "Assigned to: {{ incident_assigned_to }}"
           - "URL: {{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ incident_sys_id }}"
+
+    - name: Confirm workflow variables set
+      ansible.builtin.debug:
+        msg:
+          - "🔄 Workflow variables configured for next job template:"
+          - "Variables available for downstream playbooks:"
+          - "  - incident_number: {{ incident_number }}"
+          - "  - incident_sys_id: {{ incident_sys_id }}"
+          - "  - incident_state: {{ incident_state }}"
+          - "  - incident_priority: {{ incident_priority }}"
+          - "  - incident_assigned_to: {{ incident_assigned_to }}"
+          - "  - servicenow_instance: {{ servicenow_instance }}"
