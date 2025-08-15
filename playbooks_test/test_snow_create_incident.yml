@@ -55,15 +55,18 @@
 
     - name: Set incident facts from creation response
       ansible.builtin.set_fact:
-        cacheable: true
         incident_sys_id: "{{ created_incident.record.sys_id }}"
         incident_number: "{{ created_incident.record.number }}"
         incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
         incident_created_on: "{{ created_incident.record.sys_created_on | default(ansible_date_time.iso8601) }}"
         initial_priority: "{{ created_incident.record.priority }}"
         initial_state_value: "{{ created_incident.record.state }}"
+      when: 
+        - create_incident | default(true) | bool
+        - created_incident is succeeded
+        - created_incident.record is defined
 
-    - name: Persist the welcome message for the AAP workflow
+    - name: Persist variables for AAP workflow (set_stats for inter-playbook communication)
       delegate_to: localhost
       run_once: true
       ansible.builtin.set_stats:
@@ -74,6 +77,16 @@
           incident_created_on: "{{ created_incident.record.sys_created_on | default(ansible_date_time.iso8601) }}"
           initial_priority: "{{ created_incident.record.priority }}"
           initial_state_value: "{{ created_incident.record.state }}"
+          servicenow_instance: "{{ servicenow_instance }}"
+          workflow_timestamp: "{{ ansible_date_time.iso8601 }}"
+        aggregate: false
+      when: 
+        - create_incident | default(true) | bool
+        - created_incident is succeeded
+        - created_incident.record is defined
+      tags:
+        - set_stats
+        - aap_workflow
 
     - name: Display creation summary
       tags:
