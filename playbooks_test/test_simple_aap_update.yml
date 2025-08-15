@@ -1,0 +1,102 @@
+---
+- name: Simple AAP Workflow Variable Test - Update Incident
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Check variable availability (safe method)
+      ansible.builtin.set_fact:
+        vars_check:
+          sys_id_ok: "{{ incident_sys_id is defined and incident_sys_id | length > 0 }}"
+          number_ok: "{{ incident_number is defined and incident_number | length > 0 }}"
+          instance_ok: "{{ servicenow_instance is defined and servicenow_instance | length > 0 }}"
+      tags:
+        - check
+
+    - name: Display variable check results
+      ansible.builtin.debug:
+        msg:
+          - "🔍 AAP Variable Check Results"
+          - "============================"
+          - "incident_sys_id present: {{ vars_check.sys_id_ok }}"
+          - "incident_number present: {{ vars_check.number_ok }}"
+          - "servicenow_instance present: {{ vars_check.instance_ok }}"
+          - ""
+          - "{% if vars_check.sys_id_ok %}✅ incident_sys_id: {{ incident_sys_id }}{% else %}❌ incident_sys_id: MISSING{% endif %}"
+          - "{% if vars_check.number_ok %}✅ incident_number: {{ incident_number }}{% else %}❌ incident_number: MISSING{% endif %}"
+          - "{% if vars_check.instance_ok %}✅ servicenow_instance: {{ servicenow_instance }}{% else %}❌ servicenow_instance: MISSING{% endif %}"
+      tags:
+        - check
+
+    - name: Stop here if variables are missing
+      ansible.builtin.fail:
+        msg: |
+          ❌ Required AAP workflow variables are missing!
+          
+          This means the previous workflow node (Create Incident) either:
+          1. Did not complete successfully
+          2. Did not execute the set_stats task
+          3. Had when conditions that prevented set_stats execution
+          
+          Check the AAP workflow job logs for the previous node.
+      when: not (vars_check.sys_id_ok and vars_check.number_ok and vars_check.instance_ok)
+      tags:
+        - check
+        - validation
+
+    - name: SUCCESS - All variables are available
+      ansible.builtin.debug:
+        msg:
+          - "🎉 SUCCESS! All required variables are available"
+          - "=============================================="
+          - "Ready to proceed with incident update operations"
+          - ""
+          - "Available variables:"
+          - "  incident_sys_id: {{ incident_sys_id }}"
+          - "  incident_number: {{ incident_number }}"
+          - "  servicenow_instance: {{ servicenow_instance }}"
+          - "  workflow_timestamp: {{ workflow_timestamp | default('Not provided') }}"
+      when: vars_check.sys_id_ok and vars_check.number_ok and vars_check.instance_ok
+      tags:
+        - success
+
+    - name: Test ServiceNow connection (optional)
+      servicenow.itsm.incident_info:
+        sys_id: "{{ incident_sys_id }}"
+      register: test_incident_lookup
+      when: 
+        - vars_check.sys_id_ok and vars_check.number_ok and vars_check.instance_ok
+        - test_connection | default(false) | bool
+        - servicenow_username is defined
+        - servicenow_password is defined
+      tags:
+        - test
+        - connection
+
+    - name: Display connection test results
+      ansible.builtin.debug:
+        msg:
+          - "🔗 ServiceNow Connection Test Results"
+          - "===================================="
+          - "Connection: {{ 'SUCCESS ✅' if test_incident_lookup is succeeded else 'FAILED ❌' }}"
+          - "{% if test_incident_lookup is succeeded %}Found incident: {{ test_incident_lookup.records[0].number }}{% endif %}"
+          - "{% if test_incident_lookup is failed %}Error: {{ test_incident_lookup.msg | default('Unknown error') }}{% endif %}"
+      when: 
+        - test_connection | default(false) | bool
+        - test_incident_lookup is defined
+      tags:
+        - test
+        - connection
+
+    - name: Set results for next workflow step
+      ansible.builtin.set_stats:
+        data:
+          variable_test_successful: true
+          variables_validated_at: "{{ ansible_date_time.iso8601 }}"
+          incident_sys_id_validated: "{{ incident_sys_id }}"
+          incident_number_validated: "{{ incident_number }}"
+        aggregate: false
+      when: vars_check.sys_id_ok and vars_check.number_ok and vars_check.instance_ok
+      tags:
+        - stats
+        - success

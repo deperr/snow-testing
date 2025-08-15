@@ -82,11 +82,29 @@
           - Different inventory used between nodes
         success_msg: |
           ✅ All required variables found from previous AAP workflow node:
-          - incident_sys_id: {{ incident_sys_id }}
-          - incident_number: {{ incident_number }}
-          - servicenow_instance: {{ servicenow_instance }}
+          - incident_sys_id: Available and valid
+          - incident_number: Available and valid  
+          - servicenow_instance: Available and valid
       tags:
         - validation
+        - aap_workflow
+
+    - name: Display validated variable values
+      ansible.builtin.debug:
+        msg:
+          - "✅ Validated AAP Workflow Variables"
+          - "=================================="
+          - "incident_sys_id: {{ incident_sys_id }}"
+          - "incident_number: {{ incident_number }}"
+          - "servicenow_instance: {{ servicenow_instance }}"
+          - "workflow_timestamp: {{ workflow_timestamp | default('Not provided') }}"
+      when:
+        - variables_available.incident_sys_id_present
+        - variables_available.incident_number_present
+        - variables_available.servicenow_instance_present
+      tags:
+        - validation
+        - display
         - aap_workflow
 
     - name: Get current incident details for update
