@@ -1,0 +1,76 @@
+---
+- name: Update ServiceNow incident using variables from AAP workflow
+  hosts: localhost
+  gather_facts: true
+  
+  module_defaults:
+    servicenow.itsm.incident:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+
+  tasks:
+    - name: Validate workflow variables are available
+      ansible.builtin.assert:
+        that:
+          - incident_sys_id is defined
+          - incident_number is defined
+          - servicenow_instance is defined
+        fail_msg: "Required workflow variables missing. Ensure this playbook runs after the incident creation playbook in the workflow."
+        success_msg: "Workflow variables validated successfully"
+
+    - name: Display received workflow variables
+      ansible.builtin.debug:
+        msg:
+          - "📨 Variables Received from AAP Workflow:"
+          - "========================================"
+          - "Incident Number: {{ incident_number }}"
+          - "Incident Sys ID: {{ incident_sys_id }}"
+          - "Initial State: {{ incident_initial_state | default('unknown') }}"
+          - "Created: {{ incident_created_timestamp | default('unknown') }}"
+          - "URL: {{ incident_url | default('not provided') }}"
+
+    - name: Update incident with assignment and work notes
+      servicenow.itsm.incident:
+        sys_id: "{{ incident_sys_id }}"
+        state: present
+        assignment_group: "{{ incident_assignment_group | default('IT Support') }}"
+        assigned_to: "{{ incident_assigned_to | default(omit) }}"
+        work_notes: |
+          Incident updated via AAP workflow on {{ ansible_date_time.iso8601 }}
+          
+          Original Incident: {{ incident_number }}
+          Previous State: {{ incident_initial_state | default('unknown') }}
+          New State: {{ incident_update_state | default('in_progress') }}
+          
+          Workflow Variables Used:
+          - incident_sys_id: {{ incident_sys_id }}
+          - incident_created_timestamp: {{ incident_created_timestamp | default('not provided') }}
+        other:
+          state: "{{ incident_update_state | default('in_progress') }}"
+      register: updated_incident
+
+    - name: Display incident update results
+      ansible.builtin.debug:
+        msg:
+          - "✅ ServiceNow Incident Updated Successfully!"
+          - "============================================"
+          - "Number: {{ incident_number }}"
+          - "Sys ID: {{ incident_sys_id }}"
+          - "Updated State: {{ updated_incident.record.state }}"
+          - "Assignment Group: {{ updated_incident.record.assignment_group | default('Not assigned') }}"
+          - "Assigned To: {{ updated_incident.record.assigned_to | default('Not assigned') }}"
+          - "Last Updated: {{ updated_incident.record.sys_updated_on }}"
+          - "URL: {{ incident_url | default('https://' + servicenow_instance + '/nav_to.do?uri=incident.do?sys_id=' + incident_sys_id) }}"
+
+    - name: Export final incident state for potential next workflow steps
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.set_stats:
+        data:
+          final_incident_state: "{{ updated_incident.record.state }}"
+          final_assignment_group: "{{ updated_incident.record.assignment_group }}"
+          final_assigned_to: "{{ updated_incident.record.assigned_to | default('Unassigned') }}"
+          incident_last_updated: "{{ updated_incident.record.sys_updated_on }}"
+          workflow_completed_timestamp: "{{ ansible_date_time.iso8601 }}"

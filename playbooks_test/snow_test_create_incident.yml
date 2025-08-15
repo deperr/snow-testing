@@ -1,0 +1,64 @@
+---
+- name: Create ServiceNow incident and export variables for AAP workflow
+  hosts: localhost
+  gather_facts: true
+  
+  module_defaults:
+    servicenow.itsm.incident:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+
+  tasks:
+    - name: Validate required ServiceNow connection parameters
+      ansible.builtin.assert:
+        that:
+          - servicenow_instance is defined
+          - servicenow_username is defined
+          - servicenow_password is defined
+        fail_msg: "ServiceNow connection parameters (instance, username, password) must be provided"
+        success_msg: "ServiceNow connection parameters validated"
+
+    - name: Create incident in ServiceNow
+      servicenow.itsm.incident:
+        short_description: "{{ incident_short_description | default('Test incident created via AAP workflow - ' + ansible_date_time.iso8601) }}"
+        description: "{{ incident_description | default('This is a test incident created using Ansible Automation Platform workflow. Created on ' + ansible_date_time.iso8601) }}"
+        urgency: "{{ incident_urgency | default('medium') }}"
+        impact: "{{ incident_impact | default('medium') }}"
+        caller: "{{ incident_caller | default(servicenow_username) }}"
+        category: "{{ incident_category | default('Software') }}"
+        other:
+          state: "{{ incident_state | default('new') }}"
+      register: created_incident
+
+    - name: Set incident facts for workflow use
+      ansible.builtin.set_fact:
+        incident_sys_id: "{{ created_incident.record.sys_id }}"
+        incident_number: "{{ created_incident.record.number }}"
+        incident_url: "https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+        incident_created_timestamp: "{{ ansible_date_time.iso8601 }}"
+        incident_initial_state: "{{ created_incident.record.state }}"
+
+    - name: Display created incident details
+      ansible.builtin.debug:
+        msg:
+          - "✅ ServiceNow Incident Created Successfully!"
+          - "===========================================" 
+          - "Number: {{ incident_number }}"
+          - "Sys ID: {{ incident_sys_id }}"
+          - "State: {{ incident_initial_state }}"
+          - "Created: {{ incident_created_timestamp }}"
+          - "URL: {{ incident_url }}"
+
+    - name: Export incident variables for AAP workflow
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.set_stats:
+        data:
+          incident_sys_id: "{{ incident_sys_id }}"
+          incident_number: "{{ incident_number }}"
+          incident_url: "{{ incident_url }}"
+          incident_created_timestamp: "{{ incident_created_timestamp }}"
+          incident_initial_state: "{{ incident_initial_state }}"
+          servicenow_instance: "{{ servicenow_instance }}"
