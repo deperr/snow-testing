@@ -2,7 +2,7 @@
 
 - name: Mimic ServiceNow ticket details
   hosts: localhost
-  connection: local
+  #connection: local
   gather_facts: false
   
   tasks:
