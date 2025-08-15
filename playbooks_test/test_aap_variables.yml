@@ -1,0 +1,128 @@
+---
+- name: AAP Workflow Variable Testing Playbook
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    - name: Display all available variables (for debugging)
+      ansible.builtin.debug:
+        msg:
+          - "🔍 AAP Workflow Variable Debug Information"
+          - "========================================"
+          - "Execution Environment: {{ ansible_hostname | default('Unknown') }}"
+          - "Date/Time: {{ ansible_date_time.iso8601 }}"
+          - ""
+          - "Expected AAP Workflow Variables:"
+          - "--------------------------------"
+          - "incident_sys_id: {{ incident_sys_id | default('❌ NOT_FOUND') }}"
+          - "incident_number: {{ incident_number | default('❌ NOT_FOUND') }}"
+          - "incident_url: {{ incident_url | default('❌ NOT_FOUND') }}"
+          - "workflow_timestamp: {{ workflow_timestamp | default('❌ NOT_FOUND') }}"
+          - "initial_priority: {{ initial_priority | default('❌ NOT_FOUND') }}"
+          - "initial_state_value: {{ initial_state_value | default('❌ NOT_FOUND') }}"
+          - ""
+          - "ServiceNow Connection Variables:"
+          - "-------------------------------"
+          - "servicenow_instance: {{ servicenow_instance | default('❌ NOT_FOUND') }}"
+          - "servicenow_username: {{ servicenow_username | default('❌ NOT_FOUND') }}"
+          - "servicenow_password: {{ '***HIDDEN***' if servicenow_password is defined else '❌ NOT_FOUND' }}"
+          - ""
+          - "AAP Environment Variables:"
+          - "-------------------------"
+          - "tower_job_id: {{ tower_job_id | default('Not in AAP context') }}"
+          - "tower_job_template_id: {{ tower_job_template_id | default('Not in AAP context') }}"
+          - "tower_job_template_name: {{ tower_job_template_name | default('Not in AAP context') }}"
+          - "tower_workflow_job_id: {{ tower_workflow_job_id | default('Not in AAP context') }}"
+          - "tower_workflow_template_id: {{ tower_workflow_template_id | default('Not in AAP context') }}"
+      tags:
+        - debug
+        - variables
+
+    - name: Test variable presence and create status report
+      ansible.builtin.set_fact:
+        variable_status:
+          core_variables:
+            incident_sys_id: "{{ 'PRESENT' if incident_sys_id is defined else 'MISSING' }}"
+            incident_number: "{{ 'PRESENT' if incident_number is defined else 'MISSING' }}"
+            servicenow_instance: "{{ 'PRESENT' if servicenow_instance is defined else 'MISSING' }}"
+            servicenow_username: "{{ 'PRESENT' if servicenow_username is defined else 'MISSING' }}"
+            servicenow_password: "{{ 'PRESENT' if servicenow_password is defined else 'MISSING' }}"
+          optional_variables:
+            incident_url: "{{ 'PRESENT' if incident_url is defined else 'MISSING' }}"
+            workflow_timestamp: "{{ 'PRESENT' if workflow_timestamp is defined else 'MISSING' }}"
+            initial_priority: "{{ 'PRESENT' if initial_priority is defined else 'MISSING' }}"
+            initial_state_value: "{{ 'PRESENT' if initial_state_value is defined else 'MISSING' }}"
+          aap_context:
+            in_aap_workflow: "{{ 'YES' if tower_workflow_job_id is defined else 'NO' }}"
+            job_template: "{{ tower_job_template_name | default('Unknown') }}"
+            workflow_job_id: "{{ tower_workflow_job_id | default('N/A') }}"
+      tags:
+        - status
+        - facts
+
+    - name: Display variable status summary
+      ansible.builtin.debug:
+        msg:
+          - "📊 Variable Status Summary"
+          - "========================="
+          - ""
+          - "Core Variables (Required for workflow):"
+          - "{% for key, value in variable_status.core_variables.items() %}"
+          - "  {{ key }}: {{ value }}"
+          - "{% endfor %}"
+          - ""
+          - "Optional Variables:"
+          - "{% for key, value in variable_status.optional_variables.items() %}"
+          - "  {{ key }}: {{ value }}"
+          - "{% endfor %}"
+          - ""
+          - "AAP Context:"
+          - "{% for key, value in variable_status.aap_context.items() %}"
+          - "  {{ key }}: {{ value }}"
+          - "{% endfor %}"
+          - ""
+          - "Workflow Ready: {{ 'YES ✅' if (variable_status.core_variables.incident_sys_id == 'PRESENT' and variable_status.core_variables.servicenow_instance == 'PRESENT') else 'NO ❌' }}"
+      tags:
+        - summary
+        - status
+
+    - name: Simulate setting variables for next workflow node (if testing)
+      ansible.builtin.set_stats:
+        data:
+          test_incident_sys_id: "test-12345-67890-abcdef"
+          test_incident_number: "INC0000999"
+          test_workflow_timestamp: "{{ ansible_date_time.iso8601 }}"
+          test_mode: true
+          test_completed_at: "{{ ansible_date_time.iso8601 }}"
+        aggregate: false
+      when: aap_test_mode | default(false) | bool
+      tags:
+        - test
+        - set_stats
+
+    - name: Provide troubleshooting guidance
+      ansible.builtin.debug:
+        msg:
+          - "🔧 AAP Workflow Troubleshooting Guide"
+          - "===================================="
+          - ""
+          - "If variables are MISSING:"
+          - "1. Check that the previous workflow node completed successfully"
+          - "2. Verify the creation playbook has a working set_stats task"
+          - "3. Ensure workflow template nodes are connected with 'On Success' links"
+          - "4. Check that both nodes use the same inventory (localhost)"
+          - "5. Verify credentials are properly configured"
+          - ""
+          - "To test this playbook:"
+          - "ansible-playbook playbooks_test/test_aap_variables.yml -e aap_test_mode=true"
+          - ""
+          - "To test with manual variables:"
+          - "ansible-playbook playbooks_test/test_aap_variables.yml \\"
+          - "  -e incident_sys_id=test-123 \\"
+          - "  -e incident_number=INC0000123 \\"
+          - "  -e servicenow_instance=dev12345.service-now.com \\"
+          - "  -e servicenow_username=admin \\"
+          - "  -e servicenow_password=password"
+      tags:
+        - help
+        - troubleshooting

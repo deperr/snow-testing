@@ -31,29 +31,60 @@
         - debug
         - aap_workflow
 
+    - name: Check if required variables are available from AAP workflow artifacts
+      ansible.builtin.set_fact:
+        variables_available:
+          incident_sys_id_present: "{{ incident_sys_id is defined and incident_sys_id | length > 0 }}"
+          incident_number_present: "{{ incident_number is defined and incident_number | length > 0 }}"
+          servicenow_instance_present: "{{ servicenow_instance is defined and servicenow_instance | length > 0 }}"
+      tags:
+        - validation
+        - aap_workflow
+
+    - name: Display variable availability status
+      ansible.builtin.debug:
+        msg:
+          - "🔍 AAP Workflow Variable Status Check"
+          - "===================================="
+          - "incident_sys_id: {{ 'AVAILABLE ✅' if variables_available.incident_sys_id_present else 'MISSING ❌' }} ({{ incident_sys_id | default('UNDEFINED') }})"
+          - "incident_number: {{ 'AVAILABLE ✅' if variables_available.incident_number_present else 'MISSING ❌' }} ({{ incident_number | default('UNDEFINED') }})"
+          - "servicenow_instance: {{ 'AVAILABLE ✅' if variables_available.servicenow_instance_present else 'MISSING ❌' }} ({{ servicenow_instance | default('UNDEFINED') }})"
+          - "workflow_timestamp: {{ workflow_timestamp | default('NOT_SET') }}"
+      tags:
+        - validation
+        - aap_workflow
+
     - name: Validate that required variables are available from previous playbook
       ansible.builtin.assert:
         that:
-          - incident_sys_id is defined
-          - incident_sys_id | length > 0
-          - incident_number is defined
-          - incident_number | length > 0
+          - variables_available.incident_sys_id_present
+          - variables_available.incident_number_present
+          - variables_available.servicenow_instance_present
         fail_msg: |
-          Required variables from previous playbook are missing!
+          ❌ Required variables from previous AAP workflow node are missing!
           
-          Expected variables:
-          - incident_sys_id: {{ incident_sys_id | default('UNDEFINED') }}
-          - incident_number: {{ incident_number | default('UNDEFINED') }}
+          Variable Status:
+          - incident_sys_id: {{ 'AVAILABLE' if variables_available.incident_sys_id_present else 'MISSING' }}
+          - incident_number: {{ 'AVAILABLE' if variables_available.incident_number_present else 'MISSING' }}
+          - servicenow_instance: {{ 'AVAILABLE' if variables_available.servicenow_instance_present else 'MISSING' }}
           
-          These should be set by the previous playbook using set_stats.
-          Check that:
-          1. The creation playbook completed successfully
-          2. The set_stats task executed without errors
-          3. The AAP workflow is properly configured to pass artifacts between nodes
+          Troubleshooting Steps:
+          1. Check that the previous playbook (Create Incident) completed successfully
+          2. Verify the set_stats task executed without errors in the creation playbook
+          3. Ensure the AAP workflow template has proper node connections (Success path)
+          4. Check that both playbooks use the same inventory (localhost)
+          5. Verify no when conditions prevented set_stats execution
+          
+          Common Causes:
+          - Previous node failed or was skipped
+          - set_stats task had when conditions that evaluated to false
+          - Workflow template nodes not properly connected
+          - Different inventory used between nodes
         success_msg: |
-          ✅ Required variables found:
+          ✅ All required variables found from previous AAP workflow node:
           - incident_sys_id: {{ incident_sys_id }}
           - incident_number: {{ incident_number }}
+          - servicenow_instance: {{ servicenow_instance }}
       tags:
         - validation
         - aap_workflow
@@ -62,6 +93,9 @@
       servicenow.itsm.incident_info:
         sys_id: "{{ incident_sys_id }}"
       register: current_incident_info
+      when:
+        - variables_available.incident_sys_id_present
+        - variables_available.servicenow_instance_present
       tags:
         - lookup
         - incident
@@ -74,6 +108,9 @@
           - current_incident_info.records | length > 0
         fail_msg: "Incident with sys_id '{{ incident_sys_id }}' not found in ServiceNow"
         success_msg: "Found incident {{ current_incident_info.records[0].number }} in ServiceNow"
+      when:
+        - variables_available.incident_sys_id_present
+        - current_incident_info is defined
       tags:
         - validation
         - incident
@@ -81,6 +118,10 @@
     - name: Set current incident facts
       ansible.builtin.set_fact:
         current_incident: "{{ current_incident_info.records[0] }}"
+      when:
+        - variables_available.incident_sys_id_present
+        - current_incident_info is defined
+        - current_incident_info.records | length > 0
       tags:
         - facts
         - incident
@@ -99,6 +140,8 @@
           - "Assignment Group: {{ current_incident.assignment_group | default('None') }}"
           - "Created: {{ current_incident.sys_created_on }}"
           - "Updated: {{ current_incident.sys_updated_on }}"
+      when:
+        - current_incident is defined
       tags:
         - display
         - incident
@@ -137,7 +180,9 @@
         # Custom fields and state management via other parameter
         other: "{{ incident_other_fields | default({}) | combine({'state': incident_state} if incident_state is defined else {}) }}"
       register: updated_incident
-      when: update_incident | default(true) | bool
+      when: 
+        - update_incident | default(true) | bool
+        - current_incident is defined
       tags:
         - update
         - incident
@@ -186,18 +231,19 @@
         msg:
           - "📊 AAP Workflow Update Summary"
           - "=============================="
-          - "Incident: {{ current_incident.number }}"
+          - "Incident: {{ current_incident.number if current_incident is defined else 'N/A' }}"
           - "Original workflow: {{ workflow_timestamp | default('Unknown timestamp') }}"
-          - "{% if incident_short_description is defined and incident_short_description != current_incident.short_description %}✏️  Short Description: {{ current_incident.short_description }} → {{ incident_short_description }}{% endif %}"
-          - "{% if incident_state is defined and incident_state != current_incident.state %}🔄 State: {{ current_incident.state }} → {{ incident_state }}{% endif %}"
-          - "{% if incident_urgency is defined and incident_urgency != current_incident.urgency %}⚡ Urgency: {{ current_incident.urgency }} → {{ incident_urgency }}{% endif %}"
-          - "{% if incident_impact is defined and incident_impact != current_incident.impact %}💥 Impact: {{ current_incident.impact }} → {{ incident_impact }}{% endif %}"
-          - "{% if incident_assigned_to is defined and incident_assigned_to != current_incident.assigned_to %}👤 Assigned to: {{ current_incident.assigned_to | default('None') }} → {{ incident_assigned_to }}{% endif %}"
-          - "{% if incident_assignment_group is defined and incident_assignment_group != current_incident.assignment_group %}👥 Assignment Group: {{ current_incident.assignment_group | default('None') }} → {{ incident_assignment_group }}{% endif %}"
+          - "{% if current_incident is defined and incident_short_description is defined and incident_short_description != current_incident.short_description %}✏️  Short Description: {{ current_incident.short_description }} → {{ incident_short_description }}{% endif %}"
+          - "{% if current_incident is defined and incident_state is defined and incident_state != current_incident.state %}🔄 State: {{ current_incident.state }} → {{ incident_state }}{% endif %}"
+          - "{% if current_incident is defined and incident_urgency is defined and incident_urgency != current_incident.urgency %}⚡ Urgency: {{ current_incident.urgency }} → {{ incident_urgency }}{% endif %}"
+          - "{% if current_incident is defined and incident_impact is defined and incident_impact != current_incident.impact %}💥 Impact: {{ current_incident.impact }} → {{ incident_impact }}{% endif %}"
+          - "{% if current_incident is defined and incident_assigned_to is defined and incident_assigned_to != current_incident.assigned_to %}👤 Assigned to: {{ current_incident.assigned_to | default('None') }} → {{ incident_assigned_to }}{% endif %}"
+          - "{% if current_incident is defined and incident_assignment_group is defined and incident_assignment_group != current_incident.assignment_group %}👥 Assignment Group: {{ current_incident.assignment_group | default('None') }} → {{ incident_assignment_group }}{% endif %}"
           - "🕐 Updated at: {{ ansible_date_time.iso8601 }}"
           - "👤 Updated by: {{ servicenow_username }}"
       when: 
         - update_incident | default(true) | bool
+        - updated_incident is defined
         - updated_incident is succeeded
       tags:
         - summary
