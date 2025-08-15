@@ -9,4 +9,4 @@
     - name: Print the retrieved variables
       ansible.builtin.debug:
         msg:
-          - "Sys ID: {{ created_incident.record.sys_id }}"
+          - "Sys ID: {{ incident_sys_id }}"
