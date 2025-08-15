@@ -20,10 +20,10 @@
     - name: Validate required parameters
       ansible.builtin.assert:
         that:
-          - incident_identifier is defined
-          - incident_identifier | length > 0
-        fail_msg: "incident_identifier (number or sys_id) is required"
-        success_msg: "Incident identifier provided: {{ incident_identifier }}"
+          - incident_sys_id is defined
+          - incident_sys_id | length > 0
+        fail_msg: "incident_sys_id (number or sys_id) is required"
+        success_msg: "Incident identifier provided: {{ incident_sys_id }}"
       tags:
         - validation
         - update
@@ -32,18 +32,18 @@
       block:
         - name: Get incident by number if starts with INC
           servicenow.itsm.incident_info:
-            number: "{{ incident_identifier }}"
+            number: "{{ incident_sys_id }}"
           register: current_incident_by_number
-          when: incident_identifier | regex_search('^INC\d+$')
+          when: incident_sys_id | regex_search('^INC\d+$')
           tags:
             - lookup
             - update
 
         - name: Get incident by sys_id if 32-character hex string
           servicenow.itsm.incident_info:
-            sys_id: "{{ incident_identifier }}"
+            sys_id: "{{ incident_sys_id }}"
           register: current_incident_by_sysid
-          when: incident_identifier | length == 32 and incident_identifier | regex_search('^[a-f0-9]{32}$')
+          when: incident_sys_id | length == 32 and incident_sys_id | regex_search('^[a-f0-9]{32}$')
           tags:
             - lookup
             - update
@@ -51,7 +51,7 @@
         - name: Get incident by number (fallback search)
           servicenow.itsm.incident_info:
             query:
-              - number: "{{ incident_identifier }}"
+              - number: "{{ incident_sys_id }}"
           register: current_incident_by_query
           when: 
             - current_incident_by_number is not defined or current_incident_by_number.records | length == 0
@@ -82,7 +82,7 @@
           - current_incident is defined
           - current_incident | length > 0
           - current_incident.sys_id is defined
-        fail_msg: "Incident '{{ incident_identifier }}' not found in ServiceNow"
+        fail_msg: "Incident '{{ incident_sys_id }}' not found in ServiceNow"
         success_msg: "Found incident {{ current_incident.number }} ({{ current_incident.sys_id }})"
       tags:
         - validation
