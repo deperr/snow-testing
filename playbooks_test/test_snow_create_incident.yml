@@ -53,6 +53,15 @@
           - "Assigned to: {{ created_incident.record.assignment_group }}"
           - "URL: {{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
 
+    - name: Debug - Check if incident was created successfully
+      ansible.builtin.debug:
+        msg:
+          - "🔍 Checking incident creation status"
+          - "created_incident defined: {{ created_incident is defined }}"
+          - "created_incident succeeded: {{ created_incident is succeeded if created_incident is defined else 'N/A' }}"
+          - "created_incident.record defined: {{ created_incident.record is defined if created_incident is defined else 'N/A' }}"
+          - "sys_id available: {{ created_incident.record.sys_id is defined if (created_incident is defined and created_incident.record is defined) else 'N/A' }}"
+
     - name: Persist variables for AAP workflow (simple pattern like playbook_one)
       delegate_to: localhost
       run_once: true
@@ -63,6 +72,22 @@
           incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
           servicenow_instance: "{{ servicenow_instance }}"
           workflow_timestamp: "{{ ansible_date_time.iso8601 }}"
+      when:
+        - created_incident is defined
+        - created_incident is succeeded
+        - created_incident.record is defined
+
+    - name: Debug - Confirm variables were set for workflow
+      ansible.builtin.debug:
+        msg:
+          - "✅ Variables set for AAP workflow:"
+          - "incident_sys_id: {{ created_incident.record.sys_id }}"
+          - "incident_number: {{ created_incident.record.number }}"
+          - "servicenow_instance: {{ servicenow_instance }}"
+      when:
+        - created_incident is defined
+        - created_incident is succeeded
+        - created_incident.record is defined
 
     - name: Display creation summary
       tags:
