@@ -2,7 +2,7 @@
 
 - name: Use a variable passed via AAP workflow
   hosts: localhost
-  gather_facts: true
+  gather_facts: false
 
   tasks:
 
