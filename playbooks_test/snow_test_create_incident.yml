@@ -62,3 +62,27 @@
           incident_created_timestamp: "{{ incident_created_timestamp }}"
           incident_initial_state: "{{ incident_initial_state }}"
           servicenow_instance: "{{ servicenow_instance }}"
+        aggregate: false  # Important: Don't aggregate with previous stats
+      when:
+        - created_incident is succeeded
+        - created_incident.record is defined
+      tags:
+        - set_stats
+        - aap_workflow
+
+    - name: Display exported variables for debugging
+      ansible.builtin.debug:
+        msg:
+          - "📤 Variables Exported to AAP Workflow:"
+          - "======================================"
+          - "incident_sys_id: {{ incident_sys_id }}"
+          - "incident_number: {{ incident_number }}"
+          - "incident_url: {{ incident_url }}"
+          - "incident_created_timestamp: {{ incident_created_timestamp }}"
+          - "incident_initial_state: {{ incident_initial_state }}"
+          - "servicenow_instance: {{ servicenow_instance }}"
+          - ""
+          - "✅ These variables should be available in subsequent workflow nodes"
+      when:
+        - created_incident is succeeded
+        - created_incident.record is defined

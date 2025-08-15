@@ -11,14 +11,52 @@
         password: "{{ servicenow_password }}"
 
   tasks:
+    - name: Debug all available variables
+      ansible.builtin.debug:
+        msg:
+          - "🔍 Debugging Available Variables:"
+          - "================================="
+          - "All variables from hostvars:"
+          - "{{ hostvars[inventory_hostname] | dict2items | map(attribute='key') | list | sort }}"
+          - ""
+          - "Checking for expected workflow variables:"
+          - "incident_sys_id: {{ incident_sys_id | default('UNDEFINED') }}"
+          - "incident_number: {{ incident_number | default('UNDEFINED') }}"
+          - "servicenow_instance: {{ servicenow_instance | default('UNDEFINED') }}"
+          - "incident_created_timestamp: {{ incident_created_timestamp | default('UNDEFINED') }}"
+          - "incident_initial_state: {{ incident_initial_state | default('UNDEFINED') }}"
+          - "incident_url: {{ incident_url | default('UNDEFINED') }}"
+      tags:
+        - debug
+        - validation
+
     - name: Validate workflow variables are available
       ansible.builtin.assert:
         that:
           - incident_sys_id is defined
+          - incident_sys_id | length > 0
           - incident_number is defined
+          - incident_number | length > 0
           - servicenow_instance is defined
-        fail_msg: "Required workflow variables missing. Ensure this playbook runs after the incident creation playbook in the workflow."
-        success_msg: "Workflow variables validated successfully"
+        fail_msg: |
+          Required variables from previous playbook are missing!
+          
+          Expected variables:
+          - incident_sys_id: {{ incident_sys_id | default('UNDEFINED') }}
+          - incident_number: {{ incident_number | default('UNDEFINED') }}
+          - servicenow_instance: {{ servicenow_instance | default('UNDEFINED') }}
+          
+          These should be set by the previous playbook using set_stats.
+          Check that:
+          1. The creation playbook completed successfully
+          2. The set_stats task executed without errors
+          3. The AAP workflow is properly configured to pass artifacts between nodes
+          4. No filters are blocking variable propagation in the workflow
+        success_msg: |
+          ✅ Required variables found:
+          - incident_sys_id: {{ incident_sys_id }}
+          - incident_number: {{ incident_number }}
+          - servicenow_instance: {{ servicenow_instance }}
 
     - name: Display received workflow variables
       ansible.builtin.debug:
