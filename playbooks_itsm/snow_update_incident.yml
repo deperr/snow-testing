@@ -50,6 +50,8 @@
   tasks:
 
     - name: Print incident number
+      delegate_to: localhost
+      run_once: true
       ansible.builtin.debug:
         msg:
           - "Incident number: {{ incident_number }}"
