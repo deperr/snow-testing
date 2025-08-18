@@ -72,5 +72,4 @@
           - "🎉 ServiceNow Ticket Creation Summary"
           - "=====================================  "
           - "{% if created_problem is defined and created_problem is succeeded %}✅ Problem: {{ created_problem.record.number }}{% endif %}"
-          - "🕐 Created at: {{ ansible_date_time.iso8601 }}"
-          - "👤 Created by: {{ servicenow_username }}"
+          - "Created by: {{ servicenow_username }}"
