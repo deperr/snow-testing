@@ -22,35 +22,14 @@
         username: "{{ servicenow_username }}"
         password: "{{ servicenow_password }}"
 
-  # vars:
-  #   # Default incident properties - can be overridden via survey or extra_vars
-  #   incident_short_description: "{{ incident_title | default('Automated Incident via Ansible') }}"
-  #   incident_description: "{{ incident_details | default('This incident was created automatically by Ansible Automation Platform') }}"
-  #   incident_urgency: "{{ urgency | default('3') }}"  # 1=High, 2=Medium, 3=Low
-  #   incident_impact: "{{ impact | default('3') }}"    # 1=High, 2=Medium, 3=Low
-  #   incident_priority: "{{ priority | default('5') }}" # 1=Critical, 2=High, 3=Moderate, 4=Low, 5=Planning
-  #   incident_state: "{{ state | default('1') }}"      # 1=New, 2=In Progress, 6=Resolved, 7=Closed
-  #   incident_category: "{{ category | default('Software') }}"
-  #   incident_subcategory: "{{ subcategory | default('') }}"
-  #   incident_caller_id: "{{ caller | default('') }}"
-  #   incident_assignment_group: "{{ assignment_group | default('') }}"
-  #   incident_assigned_to: "{{ assigned_to | default('') }}"
-
   tasks:
-    # - name: Validate required incident parameters
-    #   ansible.builtin.assert:
-    #     that:
-    #       - incident_short_description is defined
-    #       - incident_short_description | length > 0
-    #     fail_msg: "incident_short_description is required and cannot be empty"
-    #     success_msg: "Required parameters validated successfully"
 
     - name: Create incident ticket in ServiceNow
       register: created_incident
       # when: create_incident | default(true) | bool
       servicenow.itsm.incident:
         short_description: "{{ incident_short_description | default('Incident created via AAP') }}"
-        description: "{{ incident_description | default('This is an incident created using Ansible Automation Platform with servicenow.itsm collection') }}"
+        description: "{{ incident_description | default('This is an incident created using Ansible Automation Platform with the ServiceNow collection') }}"
         urgency: "{{ incident_urgency | default('medium') }}"
         impact: "{{ incident_impact | default('medium') }}"
         caller: "{{ incident_caller | default(servicenow_username) }}"
@@ -82,21 +61,12 @@
           created_incident_sys_id: "{{ created_incident.record.sys_id }}"
           created_incident_state: "{{ created_incident.record.state }}"
           created_incident_priority: "{{ created_incident.record.priority }}"
-          incident_url: "https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
+          incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ created_incident.record.sys_id }}"
         per_host: false
         aggregate: true
 
-    # - name: Log incident creation to file
-    #   ansible.builtin.lineinfile:
-    #     path: "/tmp/servicenow_incidents.log"
-    #     line: "{{ ansible_date_time.iso8601 }} - CREATED - {{ created_incident.record.number }} - {{ created_incident.record.sys_id }} - {{ incident_short_description }}"
-    #     create: true
-    #     mode: '0644'
-    #   delegate_to: localhost
-    #   when: log_incidents | default(true) | bool
-
   handlers:
     - name: Send notification on incident creation
+      listen: "incident_created"
       ansible.builtin.debug:
         msg: "Incident {{ created_incident.record.number }} has been created and is ready for processing"
-      listen: "incident_created"

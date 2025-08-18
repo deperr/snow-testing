@@ -54,11 +54,11 @@
     # 1 = New, 2 = In Progress, 3 = On Hold, 6 = Resolved, 7 = Closed, 8 = Canceled
 
   tasks:
-    - name: Display received incident information
-      ansible.builtin.debug:
-        msg:
-          - "Received incident number: {{ target_incident_number }}"
-          - "Received incident sys_id: {{ target_incident_sys_id }}"
+    # - name: Display received incident information
+    #   ansible.builtin.debug:
+    #     msg:
+    #       - "Received incident number: {{ target_incident_number }}"
+    #       - "Received incident sys_id: {{ target_incident_sys_id }}"
 
     - name: Validate incident identifier
       ansible.builtin.assert:
@@ -68,10 +68,10 @@
         success_msg: "Incident identifier validated successfully"
 
     - name: Query incident details before update
+      register: incident_info
       servicenow.itsm.incident_info:
         number: "{{ target_incident_number if target_incident_number else omit }}"
         sys_id: "{{ target_incident_sys_id if target_incident_sys_id else omit }}"
-      register: incident_info
 
     - name: Verify incident exists
       ansible.builtin.assert:
@@ -95,8 +95,6 @@
           - "Priority: {{ incident_info.records[0].priority }}"
 
     - name: Build update dictionary
-      ansible.builtin.set_fact:
-        incident_updates: "{{ incident_updates | default({}) | combine({item.key: item.value}) }}"
       when: item.value | length > 0
       loop:
         - {key: "short_description", value: "{{ update_short_description }}"}
@@ -115,10 +113,10 @@
         - {key: "close_code", value: "{{ update_close_code }}"}
         - {key: "activity_due", value: "{{ update_activity_due }}"}
         - {key: "additional_assignee_list", value: "{{ update_additional_assignee_list }}"}
+      ansible.builtin.set_fact:
+        incident_updates: "{{ incident_updates | default({}) | combine({item.key: item.value}) }}"
 
     - name: Add automatic work note if no manual work notes provided
-      ansible.builtin.set_fact:
-        incident_updates: "{{ incident_updates | combine({'work_notes': auto_work_note}) }}"
       vars:
         auto_work_note: "Incident updated via Ansible Automation Platform on {{ ansible_date_time.iso8601 }}. Fields updated: {{ incident_updates.keys() | list | join(', ') }}. Updated by: {{ servicenow_username }}"
       when:
@@ -127,16 +125,20 @@
         - "'work_notes' not in incident_updates"
         - "'comments' not in incident_updates"
         - auto_add_work_notes | default(true) | bool
+      ansible.builtin.set_fact:
+        incident_updates: "{{ incident_updates | combine({'work_notes': auto_work_note}) }}"
 
     - name: Display planned updates
+      when: incident_updates is defined
       ansible.builtin.debug:
         msg:
           - "Incident to update: {{ working_incident_number }}"
           - "Fields to update: {{ incident_updates.keys() | list }}"
           - "Work notes will be added: {{ 'work_notes' in incident_updates or 'comments' in incident_updates }}"
-      when: incident_updates is defined
 
     - name: Update ServiceNow incident
+      register: update_result
+      when: incident_updates is defined and incident_updates | length > 0
       servicenow.itsm.incident:
         state: present
         number: "{{ working_incident_number }}"
@@ -161,28 +163,29 @@
           # Add automatic activity note if no manual work notes provided
           activity_due: "{{ incident_updates.activity_due | default(omit) }}"
           additional_assignee_list: "{{ incident_updates.additional_assignee_list | default(omit) }}"
-      register: update_result
-      when: incident_updates is defined and incident_updates | length > 0
 
     - name: Debug - Show what update operation returned
+      when: update_result is defined
       ansible.builtin.debug:
         msg:
           - "Update operation completed"
           - "Update result keys: {{ update_result.keys() | list if update_result is defined else 'update_result not defined' }}"
           - "Has record attribute: {{ 'record' in update_result if update_result is defined else 'N/A' }}"
-      when: update_result is defined
 
     - name: Handle case when no updates provided
+      when: incident_updates is not defined or incident_updates | length == 0
       ansible.builtin.debug:
         msg: "No update fields provided. Incident {{ working_incident_number }} remains unchanged."
-      when: incident_updates is not defined or incident_updates | length == 0
 
     - name: Debug update result structure
+      when: update_result is defined
       ansible.builtin.debug:
         var: update_result
-      when: update_result is defined
 
     - name: Display update results
+      when: 
+        - update_result is defined
+        - update_result.record is defined
       ansible.builtin.debug:
         msg:
           - "Incident updated successfully!"
@@ -190,28 +193,25 @@
           - "Updated State: {{ update_result.record.state | default('N/A') }}"
           - "Updated Priority: {{ update_result.record.priority | default('N/A') }}"
           - "Last Updated: {{ update_result.record.sys_updated_on | default('N/A') }}"
+
+    - name: Set updated incident facts for workflow use
       when: 
         - update_result is defined
         - update_result.record is defined
-
-    - name: Set updated incident facts for workflow use
       ansible.builtin.set_fact:
         updated_incident_number: "{{ update_result.record.number | default(working_incident_number) }}"
         updated_incident_sys_id: "{{ update_result.record.sys_id | default(working_incident_sys_id) }}"
         updated_incident_state: "{{ update_result.record.state | default(current_state) }}"
         updated_incident_priority: "{{ update_result.record.priority | default('') }}"
-      when: 
-        - update_result is defined
-        - update_result.record is defined
 
     - name: Set updated incident facts for workflow use (fallback)
+      when: 
+        - update_result is not defined or update_result.record is not defined
       ansible.builtin.set_fact:
         updated_incident_number: "{{ working_incident_number }}"
         updated_incident_sys_id: "{{ working_incident_sys_id }}"
         updated_incident_state: "{{ current_state }}"
         updated_incident_priority: ""
-      when: 
-        - update_result is not defined or update_result.record is not defined
 
     - name: Save update details to job artifacts
       ansible.builtin.set_stats:
@@ -228,6 +228,6 @@
 
   handlers:
     - name: Send notification on incident update
+      listen: "incident_updated"
       ansible.builtin.debug:
         msg: "Incident {{ updated_incident_number }} has been updated successfully"
-      listen: "incident_updated"
