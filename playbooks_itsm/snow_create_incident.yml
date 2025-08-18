@@ -73,6 +73,8 @@
         created_incident_state: "{{ created_incident.record.state }}"
 
     - name: Save incident details to job artifacts
+      delegate_to: localhost
+      run_once: true
       ansible.builtin.set_stats:
         data:
           incident_number: "{{ created_incident.record.number }}"
