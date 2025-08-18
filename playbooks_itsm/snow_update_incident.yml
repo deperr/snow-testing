@@ -52,7 +52,7 @@
     - name: Print incident number
       ansible.builtin.debug:
         msg:
-          - "Incident number: {{ target_incident_number }}"
+          - "Incident number: {{ created_incident_number }}"
           - "Incident sys id: {{ target_incident_sys_id }}"
 
     # - name: Validate incident identifier
