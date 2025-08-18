@@ -22,6 +22,20 @@
         username: "{{ servicenow_username }}"
         password: "{{ servicenow_password }}"
 
+  # vars:
+  #   # Default incident properties - can be overridden via survey or extra_vars
+  #   incident_short_description: "{{ incident_title | default('Automated Incident via Ansible') }}"
+  #   incident_description: "{{ incident_details | default('This incident was created automatically by Ansible Automation Platform') }}"
+  #   incident_urgency: "{{ urgency | default('3') }}"  # 1=High, 2=Medium, 3=Low
+  #   incident_impact: "{{ impact | default('3') }}"    # 1=High, 2=Medium, 3=Low
+  #   incident_priority: "{{ priority | default('5') }}" # 1=Critical, 2=High, 3=Moderate, 4=Low, 5=Planning
+  #   incident_state: "{{ state | default('1') }}"      # 1=New, 2=In Progress, 6=Resolved, 7=Closed
+  #   incident_category: "{{ category | default('Software') }}"
+  #   incident_subcategory: "{{ subcategory | default('') }}"
+  #   incident_caller_id: "{{ caller | default('') }}"
+  #   incident_assignment_group: "{{ assignment_group | default('') }}"
+  #   incident_assigned_to: "{{ assigned_to | default('') }}"
+
   tasks:
     - name: Validate required incident parameters
       ansible.builtin.assert:
