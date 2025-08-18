@@ -39,9 +39,16 @@
     update_subcategory: "{{ new_subcategory | default('') }}"
     update_assignment_group: "{{ new_assignment_group | default('') }}"
     update_assigned_to: "{{ new_assigned_to | default('') }}"
-    update_work_notes: "{{ work_notes | default('test work notes') }}"
-    update_close_notes: "{{ close_notes | default('') }}"
+    
+    # Work notes and activity logging
+    update_work_notes: "{{ work_notes | default('Test work notes') }}"
+    update_comments: "{{ comments | default('Test comment') }}"
+    update_close_notes: "{{ close_notes | default('Test close notes') }}"
     update_close_code: "{{ close_code | default('') }}"
+    
+    # Additional activity fields
+    update_activity_due: "{{ activity_due | default('') }}"
+    update_additional_assignee_list: "{{ additional_assignee_list | default('') }}"
     
     # Common state values for reference:
     # 1 = New, 2 = In Progress, 3 = On Hold, 6 = Resolved, 7 = Closed, 8 = Canceled
@@ -103,14 +110,30 @@
         - {key: "assignment_group", value: "{{ update_assignment_group }}"}
         - {key: "assigned_to", value: "{{ update_assigned_to }}"}
         - {key: "work_notes", value: "{{ update_work_notes }}"}
+        - {key: "comments", value: "{{ update_comments }}"}
         - {key: "close_notes", value: "{{ update_close_notes }}"}
         - {key: "close_code", value: "{{ update_close_code }}"}
+        - {key: "activity_due", value: "{{ update_activity_due }}"}
+        - {key: "additional_assignee_list", value: "{{ update_additional_assignee_list }}"}
+
+    - name: Add automatic work note if no manual work notes provided
+      ansible.builtin.set_fact:
+        incident_updates: "{{ incident_updates | combine({'work_notes': auto_work_note}) }}"
+      vars:
+        auto_work_note: "Incident updated via Ansible Automation Platform on {{ ansible_date_time.iso8601 }}. Fields updated: {{ incident_updates.keys() | list | join(', ') }}. Updated by: {{ servicenow_username }}"
+      when:
+        - incident_updates is defined
+        - incident_updates | length > 0
+        - "'work_notes' not in incident_updates"
+        - "'comments' not in incident_updates"
+        - auto_add_work_notes | default(true) | bool
 
     - name: Display planned updates
       ansible.builtin.debug:
         msg:
           - "Incident to update: {{ working_incident_number }}"
           - "Fields to update: {{ incident_updates.keys() | list }}"
+          - "Work notes will be added: {{ 'work_notes' in incident_updates or 'comments' in incident_updates }}"
       when: incident_updates is defined
 
     - name: Update ServiceNow incident
@@ -127,12 +150,17 @@
         subcategory: "{{ incident_updates.subcategory | default(omit) }}"
         assignment_group: "{{ incident_updates.assignment_group | default(omit) }}"
         assigned_to: "{{ incident_updates.assigned_to | default(omit) }}"
-        work_notes: "{{ incident_updates.work_notes | default(omit) }}"
-        close_notes: "{{ incident_updates.close_notes | default(omit) }}"
-        close_code: "{{ incident_updates.close_code | default(omit) }}"
         other:
+          # Work notes and activity logging
+          work_notes: "{{ incident_updates.work_notes | default(omit) }}"
+          comments: "{{ incident_updates.comments | default(omit) }}"
+          close_notes: "{{ incident_updates.close_notes | default(omit) }}"
+          close_code: "{{ incident_updates.close_code | default(omit) }}"
           # Additional fields for tracking
           updated_by: "{{ servicenow_username }}"
+          # Add automatic activity note if no manual work notes provided
+          activity_due: "{{ incident_updates.activity_due | default(omit) }}"
+          additional_assignee_list: "{{ incident_updates.additional_assignee_list | default(omit) }}"
       register: update_result
       when: incident_updates is defined and incident_updates | length > 0
 
