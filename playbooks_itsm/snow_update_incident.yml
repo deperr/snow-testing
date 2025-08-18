@@ -11,11 +11,16 @@
   # Module defaults for ServiceNow authentication and instance
   # These will be provided by AAP credential configuration
   module_defaults:
-    group/servicenow.itsm.servicenow:
-      instance: "{{ servicenow_instance }}"
-      username: "{{ servicenow_username }}"
-      password: "{{ servicenow_password }}"
-      validate_certs: true
+    servicenow.itsm.incident:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+    servicenow.itsm.incident_info:
+      instance:
+        host: "{{ servicenow_instance }}"
+        username: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
 
   vars:
     # Required: Incident identifier (can be number or sys_id)
