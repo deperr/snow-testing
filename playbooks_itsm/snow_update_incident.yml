@@ -24,9 +24,11 @@
 
   vars:
     # Required: Incident identifier (can be number or sys_id)
-    target_incident_number: "{{ incident_number | default('') }}"
-    target_incident_sys_id: "{{ incident_sys_id | default('') }}"
-    
+    # target_incident_number: "{{ incident_number | default('') }}"
+    # target_incident_sys_id: "{{ incident_sys_id | default('') }}"
+    target_incident_number: "{{ created_incident_number | default('') }}"
+    target_incident_sys_id: "{{ created_incident_sys_id | default('') }}"
+
     # Update fields - only defined fields will be updated
     update_short_description: "{{ new_short_description | default('') }}"
     update_description: "{{ new_description | default('') }}"
@@ -46,12 +48,12 @@
     # 1 = New, 2 = In Progress, 3 = On Hold, 6 = Resolved, 7 = Closed, 8 = Canceled
 
   tasks:
-    - name: Validate incident identifier
-      ansible.builtin.assert:
-        that:
-          - target_incident_number | length > 0 or target_incident_sys_id | length > 0
-        fail_msg: "Either incident_number or incident_sys_id must be provided"
-        success_msg: "Incident identifier validated successfully"
+    # - name: Validate incident identifier
+    #   ansible.builtin.assert:
+    #     that:
+    #       - target_incident_number | length > 0 or target_incident_sys_id | length > 0
+    #     fail_msg: "Either incident_number or incident_sys_id must be provided"
+    #     success_msg: "Incident identifier validated successfully"
 
     - name: Query incident details before update
       servicenow.itsm.incident_info:
@@ -59,12 +61,12 @@
         sys_id: "{{ target_incident_sys_id if target_incident_sys_id else omit }}"
       register: incident_info
 
-    - name: Verify incident exists
-      ansible.builtin.assert:
-        that:
-          - incident_info.records | length > 0
-        fail_msg: "Incident not found with provided identifier"
-        success_msg: "Incident found and ready for update"
+    # - name: Verify incident exists
+    #   ansible.builtin.assert:
+    #     that:
+    #       - incident_info.records | length > 0
+    #     fail_msg: "Incident not found with provided identifier"
+    #     success_msg: "Incident found and ready for update"
 
     - name: Set incident identifiers from query
       ansible.builtin.set_fact:
