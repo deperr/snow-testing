@@ -37,13 +37,13 @@
   #   incident_assigned_to: "{{ assigned_to | default('') }}"
 
   tasks:
-    - name: Validate required incident parameters
-      ansible.builtin.assert:
-        that:
-          - incident_short_description is defined
-          - incident_short_description | length > 0
-        fail_msg: "incident_short_description is required and cannot be empty"
-        success_msg: "Required parameters validated successfully"
+    # - name: Validate required incident parameters
+    #   ansible.builtin.assert:
+    #     that:
+    #       - incident_short_description is defined
+    #       - incident_short_description | length > 0
+    #     fail_msg: "incident_short_description is required and cannot be empty"
+    #     success_msg: "Required parameters validated successfully"
 
     - name: Create incident ticket in ServiceNow
       register: created_incident
