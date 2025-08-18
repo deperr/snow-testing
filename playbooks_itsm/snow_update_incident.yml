@@ -26,8 +26,8 @@
     # Required: Incident identifier (can be number or sys_id)
     # target_incident_number: "{{ incident_number | default('') }}"
     # target_incident_sys_id: "{{ incident_sys_id | default('') }}"
-    target_incident_number: "{{ created_incident_number | default('') }}"
-    target_incident_sys_id: "{{ created_incident_sys_id | default('') }}"
+    target_incident_number: "{{ created_incident_number | default('not finding it') }}"
+    target_incident_sys_id: "{{ created_incident_sys_id | default('not finding it') }}"
 
     # # Update fields - only defined fields will be updated
     # update_short_description: "{{ new_short_description | default('') }}"
@@ -54,7 +54,7 @@
       run_once: true
       ansible.builtin.debug:
         msg:
-          - "Incident number: {{ incident_number }}"
+          - "Incident number: {{ target_incident_number }}"
           - "Incident sys id: {{ target_incident_sys_id }}"
 
     # - name: Validate incident identifier
