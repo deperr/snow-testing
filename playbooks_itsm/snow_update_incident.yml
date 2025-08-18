@@ -24,9 +24,9 @@
 
   vars:
     # Required: Incident identifier (can be number or sys_id)
-    # target_incident_number: "{{ incident_number | default('') }}"
+    target_incident_number: "{{ incident_number | default('') }}"
     # target_incident_sys_id: "{{ incident_sys_id | default('') }}"
-    target_incident_number: "{{ created_incident_number | default('') }}"
+    # target_incident_number: "{{ created_incident_number | default('') }}"
     target_incident_sys_id: "{{ created_incident_sys_id | default('') }}"
 
     # Update fields - only defined fields will be updated
@@ -61,12 +61,12 @@
         sys_id: "{{ target_incident_sys_id if target_incident_sys_id else omit }}"
       register: incident_info
 
-    # - name: Verify incident exists
-    #   ansible.builtin.assert:
-    #     that:
-    #       - incident_info.records | length > 0
-    #     fail_msg: "Incident not found with provided identifier"
-    #     success_msg: "Incident found and ready for update"
+    - name: Verify incident exists
+      ansible.builtin.assert:
+        that:
+          - incident_info.records | length > 0
+        fail_msg: "Incident not found with provided identifier"
+        success_msg: "Incident found and ready for update"
 
     - name: Set incident identifiers from query
       ansible.builtin.set_fact:
