@@ -83,14 +83,14 @@
         per_host: false
         aggregate: false
 
-    - name: Log incident creation to file
-      ansible.builtin.lineinfile:
-        path: "/tmp/servicenow_incidents.log"
-        line: "{{ ansible_date_time.iso8601 }} - CREATED - {{ created_incident.record.number }} - {{ created_incident.record.sys_id }} - {{ incident_short_description }}"
-        create: true
-        mode: '0644'
-      delegate_to: localhost
-      when: log_incidents | default(true) | bool
+    # - name: Log incident creation to file
+    #   ansible.builtin.lineinfile:
+    #     path: "/tmp/servicenow_incidents.log"
+    #     line: "{{ ansible_date_time.iso8601 }} - CREATED - {{ created_incident.record.number }} - {{ created_incident.record.sys_id }} - {{ incident_short_description }}"
+    #     create: true
+    #     mode: '0644'
+    #   delegate_to: localhost
+    #   when: log_incidents | default(true) | bool
 
   handlers:
     - name: Send notification on incident creation
