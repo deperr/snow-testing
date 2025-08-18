@@ -28,30 +28,6 @@
     target_incident_number: "{{ created_incident_number | default(incident_number | default('')) }}"
     target_incident_sys_id: "{{ created_incident_sys_id | default(incident_sys_id | default('')) }}"
     
-    # Update fields - only defined fields will be updated
-    update_short_description: "{{ new_short_description | default('') }}"
-    update_description: "{{ new_description | default('') }}"
-    update_urgency: "{{ new_urgency | default('') }}"
-    update_impact: "{{ new_impact | default('') }}"
-    update_priority: "{{ new_priority | default('') }}"
-    update_state: "{{ new_state | default('') }}"
-    update_category: "{{ new_category | default('') }}"
-    update_subcategory: "{{ new_subcategory | default('') }}"
-    update_assignment_group: "{{ new_assignment_group | default('') }}"
-    update_assigned_to: "{{ new_assigned_to | default('') }}"
-    
-    # Work notes and activity logging
-    update_work_notes: "{{ work_notes | default('Test work notes') }}"
-    update_comments: "{{ comments | default('Test comment') }}"
-    update_close_notes: "{{ close_notes | default('Test close notes') }}"
-    update_close_code: "{{ close_code | default('') }}"
-    
-    # Additional activity fields
-    update_activity_due: "{{ activity_due | default('') }}"
-    update_additional_assignee_list: "{{ additional_assignee_list | default('') }}"
-    
-    # Common state values for reference:
-    # 1 = New, 2 = In Progress, 3 = On Hold, 6 = Resolved, 7 = Closed, 8 = Canceled
 
   tasks:
     # - name: Display received incident information
@@ -97,22 +73,25 @@
     - name: Build update dictionary
       when: item.value | length > 0
       loop:
-        - {key: "short_description", value: "{{ update_short_description }}"}
-        - {key: "description", value: "{{ update_description }}"}
-        - {key: "urgency", value: "{{ update_urgency }}"}
-        - {key: "impact", value: "{{ update_impact }}"}
-        - {key: "priority", value: "{{ update_priority }}"}
-        - {key: "state", value: "{{ update_state }}"}
-        - {key: "category", value: "{{ update_category }}"}
-        - {key: "subcategory", value: "{{ update_subcategory }}"}
-        - {key: "assignment_group", value: "{{ update_assignment_group }}"}
-        - {key: "assigned_to", value: "{{ update_assigned_to }}"}
-        - {key: "work_notes", value: "{{ update_work_notes }}"}
-        - {key: "comments", value: "{{ update_comments }}"}
-        - {key: "close_notes", value: "{{ update_close_notes }}"}
-        - {key: "close_code", value: "{{ update_close_code }}"}
-        - {key: "activity_due", value: "{{ update_activity_due }}"}
-        - {key: "additional_assignee_list", value: "{{ update_additional_assignee_list }}"}
+        # Core incident fields
+        - {key: "short_description", value: "{{ new_short_description | default('') }}"}
+        - {key: "description", value: "{{ new_description | default('') }}"}
+        - {key: "urgency", value: "{{ new_urgency | default('') }}"}
+        - {key: "impact", value: "{{ new_impact | default('') }}"}
+        - {key: "priority", value: "{{ new_priority | default('') }}"}
+        - {key: "state", value: "{{ new_state | default('') }}"}
+        - {key: "category", value: "{{ new_category | default('') }}"}
+        - {key: "subcategory", value: "{{ new_subcategory | default('') }}"}
+        - {key: "assignment_group", value: "{{ new_assignment_group | default('') }}"}
+        - {key: "assigned_to", value: "{{ new_assigned_to | default('') }}"}
+        # Work notes and activity logging
+        - {key: "work_notes", value: "{{ work_notes | default('Test work notes') }}"}
+        - {key: "comments", value: "{{ comments | default('Test comment') }}"}
+        - {key: "close_notes", value: "{{ close_notes | default('Test close notes') }}"}
+        - {key: "close_code", value: "{{ close_code | default('') }}"}
+        # Additional activity fields
+        - {key: "activity_due", value: "{{ activity_due | default('') }}"}
+        - {key: "additional_assignee_list", value: "{{ additional_assignee_list | default('') }}"}
       ansible.builtin.set_fact:
         incident_updates: "{{ incident_updates | default({}) | combine({item.key: item.value}) }}"
 
@@ -220,7 +199,7 @@
           updated_incident_sys_id: "{{ updated_incident_sys_id }}"
           updated_incident_state: "{{ updated_incident_state }}"
           updated_incident_priority: "{{ updated_incident_priority }}"
-          incident_url: "https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident_sys_id }}"
+          incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident_sys_id }}"
           fields_updated: "{{ incident_updates.keys() | list if incident_updates is defined else [] }}"
           update_success: "{{ (update_result is defined and update_result.record is defined) | bool }}"
         per_host: false
