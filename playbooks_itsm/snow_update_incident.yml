@@ -1,206 +1,181 @@
 ---
-- name: ServiceNow ITSM - Update Existing Incidents
+# ServiceNow Incident Update Playbook
+# This playbook updates an existing incident in ServiceNow
+# Designed for Ansible Automation Platform 2.5
+# Uses module defaults for credentials and instance configuration
+
+- name: Update ServiceNow Incident
   hosts: localhost
   gather_facts: false
   
+  # Module defaults for ServiceNow authentication and instance
+  # These will be provided by AAP credential configuration
   module_defaults:
-    servicenow.itsm.incident:
-      instance:
-        host: "{{ servicenow_instance }}"
-        username: "{{ servicenow_username }}"
-        password: "{{ servicenow_password }}"
-        # Optional OAuth configuration (uncomment if using OAuth)
-        # client_id: "{{ servicenow_client_id | default(omit) }}"
-        # client_secret: "{{ servicenow_client_secret | default(omit) }}"
-    servicenow.itsm.incident_info:
-      instance:
-        host: "{{ servicenow_instance }}"
-        username: "{{ servicenow_username }}"
-        password: "{{ servicenow_password }}"
-        # Optional OAuth configuration (uncomment if using OAuth)
-        # client_id: "{{ servicenow_client_id | default(omit) }}"
-        # client_secret: "{{ servicenow_client_secret | default(omit) }}"
+    group/servicenow.itsm.servicenow:
+      instance: "{{ servicenow_instance | default(ansible_servicenow_instance) }}"
+      username: "{{ servicenow_username | default(ansible_servicenow_username) }}"
+      password: "{{ servicenow_password | default(ansible_servicenow_password) }}"
+      validate_certs: "{{ servicenow_validate_certs | default(true) }}"
+
+  vars:
+    # Required: Incident identifier (can be number or sys_id)
+    target_incident_number: "{{ incident_number | default('') }}"
+    target_incident_sys_id: "{{ incident_sys_id | default('') }}"
+    
+    # Update fields - only defined fields will be updated
+    update_short_description: "{{ new_short_description | default('') }}"
+    update_description: "{{ new_description | default('') }}"
+    update_urgency: "{{ new_urgency | default('') }}"
+    update_impact: "{{ new_impact | default('') }}"
+    update_priority: "{{ new_priority | default('') }}"
+    update_state: "{{ new_state | default('') }}"
+    update_category: "{{ new_category | default('') }}"
+    update_subcategory: "{{ new_subcategory | default('') }}"
+    update_assignment_group: "{{ new_assignment_group | default('') }}"
+    update_assigned_to: "{{ new_assigned_to | default('') }}"
+    update_work_notes: "{{ work_notes | default('') }}"
+    update_close_notes: "{{ close_notes | default('') }}"
+    update_close_code: "{{ close_code | default('') }}"
+    
+    # Common state values for reference:
+    # 1 = New, 2 = In Progress, 3 = On Hold, 6 = Resolved, 7 = Closed, 8 = Canceled
 
   tasks:
-    - name: Validate required parameters
+    - name: Validate incident identifier
       ansible.builtin.assert:
         that:
-          - incident_identifier is defined
-          - incident_identifier | length > 0
-        fail_msg: "incident_identifier (number or sys_id) is required"
-        success_msg: "Incident identifier provided: {{ incident_identifier }}"
-      tags:
-        - validation
-        - update
+          - target_incident_number | length > 0 or target_incident_sys_id | length > 0
+        fail_msg: "Either incident_number or incident_sys_id must be provided"
+        success_msg: "Incident identifier validated successfully"
 
-    - name: Determine identifier type and get current incident
-      block:
-        - name: Get incident by number if starts with INC
-          servicenow.itsm.incident_info:
-            number: "{{ incident_identifier }}"
-          register: current_incident_by_number
-          when: incident_identifier | regex_search('^INC\d+$')
-          tags:
-            - lookup
-            - update
+    - name: Query incident details before update
+      servicenow.itsm.incident_info:
+        number: "{{ target_incident_number if target_incident_number else omit }}"
+        sys_id: "{{ target_incident_sys_id if target_incident_sys_id else omit }}"
+      register: incident_info
 
-        - name: Get incident by sys_id if 32-character hex string
-          servicenow.itsm.incident_info:
-            sys_id: "{{ incident_identifier }}"
-          register: current_incident_by_sysid
-          when: incident_identifier | length == 32 and incident_identifier | regex_search('^[a-f0-9]{32}$')
-          tags:
-            - lookup
-            - update
+    - name: Verify incident exists
+      ansible.builtin.assert:
+        that:
+          - incident_info.records | length > 0
+        fail_msg: "Incident not found with provided identifier"
+        success_msg: "Incident found and ready for update"
 
-        - name: Get incident by number (fallback search)
-          servicenow.itsm.incident_info:
-            query:
-              - number: "{{ incident_identifier }}"
-          register: current_incident_by_query
-          when: 
-            - current_incident_by_number is not defined or current_incident_by_number.records | length == 0
-            - current_incident_by_sysid is not defined or current_incident_by_sysid.records | length == 0
-          tags:
-            - lookup
-            - update
-
-    - name: Set current incident facts
+    - name: Set incident identifiers from query
       ansible.builtin.set_fact:
-        current_incident: >-
-          {%- if current_incident_by_number is defined and current_incident_by_number.records | length > 0 -%}
-            {{ current_incident_by_number.records[0] }}
-          {%- elif current_incident_by_sysid is defined and current_incident_by_sysid.records | length > 0 -%}
-            {{ current_incident_by_sysid.records[0] }}
-          {%- elif current_incident_by_query is defined and current_incident_by_query.records | length > 0 -%}
-            {{ current_incident_by_query.records[0] }}
-          {%- else -%}
-            {}
-          {%- endif -%}
-      tags:
-        - lookup
-        - update
+        working_incident_number: "{{ incident_info.records[0].number }}"
+        working_incident_sys_id: "{{ incident_info.records[0].sys_id }}"
+        current_state: "{{ incident_info.records[0].state }}"
 
-    - name: Verify incident was found
-      ansible.builtin.assert:
-        that:
-          - current_incident is defined
-          - current_incident | length > 0
-          - current_incident.sys_id is defined
-        fail_msg: "Incident '{{ incident_identifier }}' not found in ServiceNow"
-        success_msg: "Found incident {{ current_incident.number }} ({{ current_incident.sys_id }})"
-      tags:
-        - validation
-        - update
-
-    - name: Display current incident details
+    - name: Display current incident status
       ansible.builtin.debug:
         msg:
-          - "📋 Current Incident Details"
-          - "=========================="
-          - "Number: {{ current_incident.number }}"
-          - "Sys ID: {{ current_incident.sys_id }}"
-          - "State: {{ current_incident.state }}"
-          - "Priority: {{ current_incident.priority }}"
-          - "Short Description: {{ current_incident.short_description }}"
-          - "Assigned to: {{ current_incident.assigned_to | default('Unassigned') }}"
-          - "Assignment Group: {{ current_incident.assignment_group | default('None') }}"
-          - "Created: {{ current_incident.sys_created_on }}"
-          - "Updated: {{ current_incident.sys_updated_on }}"
-      when: update_incident | default(true) | bool
-      tags:
-        - display
-        - update
+          - "Found incident: {{ working_incident_number }}"
+          - "Current state: {{ current_state }}"
+          - "Short description: {{ incident_info.records[0].short_description }}"
+          - "Priority: {{ incident_info.records[0].priority }}"
 
-    - name: Update incident in ServiceNow
+    - name: Build update dictionary
+      ansible.builtin.set_fact:
+        incident_updates: "{{ incident_updates | default({}) | combine({item.key: item.value}) }}"
+      when: item.value | length > 0
+      loop:
+        - {key: "short_description", value: "{{ update_short_description }}"}
+        - {key: "description", value: "{{ update_description }}"}
+        - {key: "urgency", value: "{{ update_urgency }}"}
+        - {key: "impact", value: "{{ update_impact }}"}
+        - {key: "priority", value: "{{ update_priority }}"}
+        - {key: "state", value: "{{ update_state }}"}
+        - {key: "category", value: "{{ update_category }}"}
+        - {key: "subcategory", value: "{{ update_subcategory }}"}
+        - {key: "assignment_group", value: "{{ update_assignment_group }}"}
+        - {key: "assigned_to", value: "{{ update_assigned_to }}"}
+        - {key: "work_notes", value: "{{ update_work_notes }}"}
+        - {key: "close_notes", value: "{{ update_close_notes }}"}
+        - {key: "close_code", value: "{{ update_close_code }}"}
+
+    - name: Display planned updates
+      ansible.builtin.debug:
+        msg:
+          - "Incident to update: {{ working_incident_number }}"
+          - "Fields to update: {{ incident_updates.keys() | list }}"
+      when: incident_updates is defined
+
+    - name: Update ServiceNow incident
       servicenow.itsm.incident:
-        sys_id: "{{ current_incident.sys_id }}"
         state: present
-        # Core fields that can be updated
-        short_description: "{{ incident_short_description | default(current_incident.short_description) }}"
-        description: "{{ incident_description | default(current_incident.description) }}"
-        urgency: "{{ incident_urgency | default(current_incident.urgency) }}"
-        impact: "{{ incident_impact | default(current_incident.impact) }}"
-        # Assignment fields
-        assigned_to: "{{ incident_assigned_to | default(current_incident.assigned_to) if incident_assigned_to is defined else omit }}"
-        assignment_group: "{{ incident_assignment_group | default(current_incident.assignment_group) if incident_assignment_group is defined else omit }}"
-        # Resolution fields (only if resolving/closing)
-        close_code: "{{ incident_close_code | default(omit) if incident_state in ['resolved', 'closed'] else omit }}"
-        close_notes: "{{ incident_close_notes | default(omit) if incident_state in ['resolved', 'closed'] else omit }}"
-        # Work notes and comments
-        work_notes: "{{ incident_work_notes | default(omit) }}"
-        # Other fields
-        caller: "{{ incident_caller | default(current_incident.caller) if incident_caller is defined else omit }}"
-        category: "{{ incident_category | default(current_incident.category) if incident_category is defined else omit }}"
-        subcategory: "{{ incident_subcategory | default(current_incident.subcategory) if incident_subcategory is defined else omit }}"
-        business_service: "{{ incident_business_service | default(current_incident.business_service) if incident_business_service is defined else omit }}"
-        cmdb_ci: "{{ incident_cmdb_ci | default(current_incident.cmdb_ci) if incident_cmdb_ci is defined else omit }}"
-        # Custom fields and state management via other parameter
-        other: "{{ incident_other_fields | default({}) | combine({'state': incident_state} if incident_state is defined else {}) }}"
-      register: updated_incident
-      when: update_incident | default(true) | bool
-      tags:
-        - update
-        - incident
+        number: "{{ working_incident_number }}"
+        short_description: "{{ incident_updates.short_description | default(omit) }}"
+        description: "{{ incident_updates.description | default(omit) }}"
+        urgency: "{{ incident_updates.urgency | default(omit) }}"
+        impact: "{{ incident_updates.impact | default(omit) }}"
+        priority: "{{ incident_updates.priority | default(omit) }}"
+        incident_state: "{{ incident_updates.state | default(omit) }}"
+        category: "{{ incident_updates.category | default(omit) }}"
+        subcategory: "{{ incident_updates.subcategory | default(omit) }}"
+        assignment_group: "{{ incident_updates.assignment_group | default(omit) }}"
+        assigned_to: "{{ incident_updates.assigned_to | default(omit) }}"
+        work_notes: "{{ incident_updates.work_notes | default(omit) }}"
+        close_notes: "{{ incident_updates.close_notes | default(omit) }}"
+        close_code: "{{ incident_updates.close_code | default(omit) }}"
+        other:
+          # Additional fields for tracking
+          updated_by: "{{ servicenow_username | default(ansible_servicenow_username) }}"
+      register: update_result
+      when: incident_updates is defined and incident_updates | length > 0
+
+    - name: Handle case when no updates provided
+      ansible.builtin.debug:
+        msg: "No update fields provided. Incident {{ working_incident_number }} remains unchanged."
+      when: incident_updates is not defined or incident_updates | length == 0
 
     - name: Display update results
       ansible.builtin.debug:
         msg:
-          - "✅ Incident Updated Successfully!"
-          - "================================="
-          - "Number: {{ updated_incident.record.number }}"
-          - "Sys ID: {{ updated_incident.record.sys_id }}"
-          - "State: {{ updated_incident.record.state }}"
-          - "Priority: {{ updated_incident.record.priority }}"
-          - "Short Description: {{ updated_incident.record.short_description }}"
-          - "Assigned to: {{ updated_incident.record.assigned_to | default('Unassigned') }}"
-          - "Assignment Group: {{ updated_incident.record.assignment_group | default('None') }}"
-          - "Last Updated: {{ updated_incident.record.sys_updated_on }}"
-          - "🔗 URL: https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident.record.sys_id }}"
-      when: 
-        - update_incident | default(true) | bool
-        - updated_incident is succeeded
-        - updated_incident.record is defined
-      tags:
-        - display
-        - update
+          - "Incident updated successfully!"
+          - "Incident Number: {{ update_result.record.number }}"
+          - "Updated State: {{ update_result.record.state }}"
+          - "Updated Priority: {{ update_result.record.priority }}"
+          - "Last Updated: {{ update_result.record.sys_updated_on }}"
+      when: update_result is defined
 
-    - name: Add work notes if provided
-      servicenow.itsm.incident:
-        sys_id: "{{ current_incident.sys_id }}"
-        work_notes: "{{ incident_work_notes }}"
-      when:
-        - incident_work_notes is defined
-        - incident_work_notes | length > 0
-        - add_work_notes | default(false) | bool
-      tags:
-        - work_notes
-        - update
+    - name: Set updated incident facts for workflow use
+      ansible.builtin.set_fact:
+        updated_incident_number: "{{ update_result.record.number | default(working_incident_number) }}"
+        updated_incident_sys_id: "{{ update_result.record.sys_id | default(working_incident_sys_id) }}"
+        updated_incident_state: "{{ update_result.record.state | default(current_state) }}"
+        updated_incident_priority: "{{ update_result.record.priority | default('') }}"
 
-    - name: Display change summary
+    - name: Save update details to job artifacts
+      ansible.builtin.set_stats:
+        data:
+          updated_incident_number: "{{ updated_incident_number }}"
+          updated_incident_sys_id: "{{ updated_incident_sys_id }}"
+          updated_incident_state: "{{ updated_incident_state }}"
+          updated_incident_priority: "{{ updated_incident_priority }}"
+          incident_url: "https://{{ servicenow_instance | default(ansible_servicenow_instance) }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident_sys_id }}"
+          fields_updated: "{{ incident_updates.keys() | list if incident_updates is defined else [] }}"
+        per_host: false
+        aggregate: false
+
+    - name: Log incident update to file
+      ansible.builtin.lineinfile:
+        path: "/tmp/servicenow_incidents.log"
+        line: "{{ ansible_date_time.iso8601 }} - UPDATED - {{ updated_incident_number }} - {{ updated_incident_sys_id }} - Fields: {{ incident_updates.keys() | list if incident_updates is defined else 'None' }}"
+        create: true
+        mode: '0644'
+      delegate_to: localhost
+      when: log_incidents | default(true) | bool
+
+    - name: Notify if incident was closed
       ansible.builtin.debug:
-        msg:
-          - "📊 Update Summary"
-          - "================"
-          - "Incident: {{ current_incident.number }}"
-          - "{% if incident_short_description is defined and incident_short_description != current_incident.short_description %}✏️  Short Description: {{ current_incident.short_description }} → {{ incident_short_description }}{% endif %}"
-          - "{% if incident_state is defined and incident_state != current_incident.state %}🔄 State: {{ current_incident.state }} → {{ incident_state }}{% endif %}"
-          - "{% if incident_urgency is defined and incident_urgency != current_incident.urgency %}⚡ Urgency: {{ current_incident.urgency }} → {{ incident_urgency }}{% endif %}"
-          - "{% if incident_impact is defined and incident_impact != current_incident.impact %}💥 Impact: {{ current_incident.impact }} → {{ incident_impact }}{% endif %}"
-          - "{% if incident_assigned_to is defined and incident_assigned_to != current_incident.assigned_to %}👤 Assigned to: {{ current_incident.assigned_to | default('None') }} → {{ incident_assigned_to }}{% endif %}"
-          - "{% if incident_assignment_group is defined and incident_assignment_group != current_incident.assignment_group %}👥 Assignment Group: {{ current_incident.assignment_group | default('None') }} → {{ incident_assignment_group }}{% endif %}"
-          - "{% if incident_work_notes is defined and incident_work_notes | length > 0 %}📝 Work Notes Added: {{ incident_work_notes[:50] }}{% if incident_work_notes | length > 50 %}...{% endif %}{% endif %}"
-          - "🕐 Updated at: {{ ansible_date_time.iso8601 }}"
-          - "👤 Updated by: {{ servicenow_username }}"
+        msg: "ATTENTION: Incident {{ updated_incident_number }} has been closed (state: {{ updated_incident_state }})"
       when: 
-        - update_incident | default(true) | bool
-        - updated_incident is succeeded
-      tags:
-        - summary
-        - update
+        - update_result is defined
+        - updated_incident_state in ['6', '7']  # Resolved or Closed
 
   handlers:
     - name: Send notification on incident update
-      listen: "notify_incident_updated"
       ansible.builtin.debug:
-        msg: "Notification: ServiceNow incident {{ updated_incident.record.number }} has been updated and is ready for review"
+        msg: "Incident {{ updated_incident_number }} has been updated successfully"
+      listen: "incident_updated"
