@@ -22,19 +22,18 @@
         username: "{{ servicenow_username }}"
         password: "{{ servicenow_password }}"
 
-  vars:
-    # Required: Incident identifier (can be number or sys_id)
-    # These come from the previous job's artifacts via set_stats
-    target_incident_number: "{{ created_incident_number | default(incident_number | default('')) }}"
-    target_incident_sys_id: "{{ created_incident_sys_id | default(incident_sys_id | default('')) }}"
-    
-
   tasks:
     # - name: Display received incident information
     #   ansible.builtin.debug:
     #     msg:
     #       - "Received incident number: {{ target_incident_number }}"
     #       - "Received incident sys_id: {{ target_incident_sys_id }}"
+
+    - name: Set incident identifiers from workflow or input
+      # Priority: workflow artifacts (created_incident_*) > manual input (incident_*)
+      ansible.builtin.set_fact:
+        target_incident_number: "{{ created_incident_number | default(incident_number | default('')) }}"
+        target_incident_sys_id: "{{ created_incident_sys_id | default(incident_sys_id | default('')) }}"
 
     - name: Validate incident identifier
       ansible.builtin.assert:
