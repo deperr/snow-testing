@@ -136,20 +136,35 @@
       register: update_result
       when: incident_updates is defined and incident_updates | length > 0
 
+    - name: Debug - Show what update operation returned
+      ansible.builtin.debug:
+        msg:
+          - "Update operation completed"
+          - "Update result keys: {{ update_result.keys() | list if update_result is defined else 'update_result not defined' }}"
+          - "Has record attribute: {{ 'record' in update_result if update_result is defined else 'N/A' }}"
+      when: update_result is defined
+
     - name: Handle case when no updates provided
       ansible.builtin.debug:
         msg: "No update fields provided. Incident {{ working_incident_number }} remains unchanged."
       when: incident_updates is not defined or incident_updates | length == 0
 
+    - name: Debug update result structure
+      ansible.builtin.debug:
+        var: update_result
+      when: update_result is defined
+
     - name: Display update results
       ansible.builtin.debug:
         msg:
           - "Incident updated successfully!"
-          - "Incident Number: {{ update_result.record.number }}"
-          - "Updated State: {{ update_result.record.state }}"
-          - "Updated Priority: {{ update_result.record.priority }}"
-          - "Last Updated: {{ update_result.record.sys_updated_on }}"
-      when: update_result is defined
+          - "Incident Number: {{ update_result.record.number | default('N/A') }}"
+          - "Updated State: {{ update_result.record.state | default('N/A') }}"
+          - "Updated Priority: {{ update_result.record.priority | default('N/A') }}"
+          - "Last Updated: {{ update_result.record.sys_updated_on | default('N/A') }}"
+      when: 
+        - update_result is defined
+        - update_result.record is defined
 
     - name: Set updated incident facts for workflow use
       ansible.builtin.set_fact:
@@ -157,6 +172,18 @@
         updated_incident_sys_id: "{{ update_result.record.sys_id | default(working_incident_sys_id) }}"
         updated_incident_state: "{{ update_result.record.state | default(current_state) }}"
         updated_incident_priority: "{{ update_result.record.priority | default('') }}"
+      when: 
+        - update_result is defined
+        - update_result.record is defined
+
+    - name: Set updated incident facts for workflow use (fallback)
+      ansible.builtin.set_fact:
+        updated_incident_number: "{{ working_incident_number }}"
+        updated_incident_sys_id: "{{ working_incident_sys_id }}"
+        updated_incident_state: "{{ current_state }}"
+        updated_incident_priority: ""
+      when: 
+        - update_result is not defined or update_result.record is not defined
 
     - name: Save update details to job artifacts
       ansible.builtin.set_stats:
@@ -167,6 +194,7 @@
           updated_incident_priority: "{{ updated_incident_priority }}"
           incident_url: "https://{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident_sys_id }}"
           fields_updated: "{{ incident_updates.keys() | list if incident_updates is defined else [] }}"
+          update_success: "{{ (update_result is defined and update_result.record is defined) | bool }}"
         per_host: false
         aggregate: true
 
