@@ -39,7 +39,7 @@
     update_subcategory: "{{ new_subcategory | default('') }}"
     update_assignment_group: "{{ new_assignment_group | default('') }}"
     update_assigned_to: "{{ new_assigned_to | default('') }}"
-    update_work_notes: "{{ work_notes | default('') }}"
+    update_work_notes: "{{ work_notes | default('test work notes') }}"
     update_close_notes: "{{ close_notes | default('') }}"
     update_close_code: "{{ close_code | default('') }}"
     
