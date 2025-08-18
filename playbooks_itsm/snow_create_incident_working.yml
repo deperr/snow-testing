@@ -23,9 +23,6 @@
     - name: Create incident ticket in ServiceNow
       register: created_incident
       when: create_incident | default(true) | bool
-      tags:
-        - create
-        - incident
       servicenow.itsm.incident:
         short_description: "{{ incident_short_description | default('Incident created via AAP') }}"
         description: "{{ incident_description | default('This is an incident created using Ansible Automation Platform with servicenow.itsm collection') }}"
@@ -40,9 +37,6 @@
         - create_incident | default(true) | bool
         - created_incident is succeeded
         - created_incident.record is defined
-      tags:
-        - create
-        - incident
       ansible.builtin.debug:
         msg: 
           - "✅ Incident created successfully!"
@@ -73,9 +67,6 @@
         aggregate: false
 
     - name: Display creation summary
-      tags:
-        - create
-        - summary
       ansible.builtin.debug:
         msg: 
           - "🎉 ServiceNow Ticket Creation Summary"
@@ -83,9 +74,3 @@
           - "{% if created_problem is defined and created_problem is succeeded %}✅ Problem: {{ created_problem.record.number }}{% endif %}"
           - "🕐 Created at: {{ ansible_date_time.iso8601 }}"
           - "👤 Created by: {{ servicenow_username }}"
-
-  handlers:
-    - name: Send notification on ticket creation
-      listen: "notify_ticket_created"
-      ansible.builtin.debug:
-        msg: "Notification: New ServiceNow tickets have been created and are ready for processing"
