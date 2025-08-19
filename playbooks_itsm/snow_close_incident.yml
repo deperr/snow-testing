@@ -177,7 +177,6 @@
           closed_incident_close_code: "{{ closed_incident_close_code }}"
           closure_method: "{{ closure_method | default('6') }}"
           incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ closed_incident_sys_id }}"
-          closure_timestamp: "{{ ansible_date_time.iso8601 }}"
           closure_success: "{{ (closure_result is defined and closure_result.record is defined) | bool }}"
         per_host: false
         aggregate: true
