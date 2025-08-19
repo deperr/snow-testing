@@ -190,7 +190,6 @@
           - "🔄 Final State: {{ 'Resolved' if closed_incident_state == '6' else 'Closed' if closed_incident_state == '7' else 'Unknown' }}"
           - "📝 Close Code: {{ closed_incident_close_code if closed_incident_close_code else 'Default' }}"
           - "🔗 URL: {{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ closed_incident_sys_id }}"
-          - "⏰ Closed: {{ ansible_date_time.iso8601 }}"
 
   handlers:
     - name: Send notification on incident closure

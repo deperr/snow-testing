@@ -190,18 +190,6 @@
         updated_incident_state: "{{ current_state }}"
         updated_incident_priority: ""
 
-    - name: Save update details to job artifacts
-      ansible.builtin.set_stats:
-        data:
-          updated_incident_number: "{{ updated_incident_number }}"
-          updated_incident_sys_id: "{{ updated_incident_sys_id }}"
-          updated_incident_state: "{{ updated_incident_state }}"
-          updated_incident_priority: "{{ updated_incident_priority }}"
-          incident_url: "{{ servicenow_instance }}/nav_to.do?uri=incident.do?sys_id={{ updated_incident_sys_id }}"
-          fields_updated: "{{ incident_updates.keys() | list if incident_updates is defined else [] }}"
-          update_success: "{{ (update_result is defined and update_result.record is defined) | bool }}"
-        per_host: false
-        aggregate: true
 
   handlers:
     - name: Send notification on incident update
