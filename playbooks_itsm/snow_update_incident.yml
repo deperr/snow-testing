@@ -118,14 +118,13 @@
       register: update_result
       when: incident_updates is defined and incident_updates | length > 0
       servicenow.itsm.incident:
-        state: present
+        state: "{{ incident_updates.state | default('present') }}"
         number: "{{ working_incident_number }}"
         short_description: "{{ incident_updates.short_description | default(omit) }}"
         description: "{{ incident_updates.description | default(omit) }}"
         urgency: "{{ incident_updates.urgency | default(omit) }}"
         impact: "{{ incident_updates.impact | default(omit) }}"
         priority: "{{ incident_updates.priority | default(omit) }}"
-        incident_state: "{{ incident_updates.state | default(omit) }}"
         category: "{{ incident_updates.category | default(omit) }}"
         subcategory: "{{ incident_updates.subcategory | default(omit) }}"
         assignment_group: "{{ incident_updates.assignment_group | default(omit) }}"

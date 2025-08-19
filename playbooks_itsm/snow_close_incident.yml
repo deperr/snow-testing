@@ -8,8 +8,6 @@
   hosts: localhost
   gather_facts: false
 
-  # Module defaults for ServiceNow authentication and instance
-  # These will be provided by AAP credential configuration
   module_defaults:
     servicenow.itsm.incident:
       instance:
@@ -24,7 +22,6 @@
 
   tasks:
     - name: Set incident identifiers from workflow or input
-      # Priority: workflow artifacts (created_incident_*) > manual input (incident_*)
       ansible.builtin.set_fact:
         target_incident_number: "{{ created_incident_number | default(updated_incident_number | default(incident_number | default(''))) }}"
         target_incident_sys_id: "{{ created_incident_sys_id | default(updated_incident_sys_id | default(incident_sys_id | default(''))) }}"
@@ -115,20 +112,21 @@
       register: closure_result
       when: closure_updates is defined and closure_updates | length > 0
       servicenow.itsm.incident:
-        state: present
+        state: "{{ closure_method | default('6') }}"  # 6=Resolved, 7=Closed
         number: "{{ working_incident_number }}"
-        incident_state: "{{ closure_method | default('6') }}"  # 6=Resolved, 7=Closed
         short_description: "{{ closure_updates.short_description | default(omit) }}"
         description: "{{ closure_updates.description | default(omit) }}"
-        priority: "{{ closure_updates.priority | default(omit) }}"
-        assignment_group: "{{ closure_updates.assignment_group | default(omit) }}"
-        assigned_to: "{{ closure_updates.assigned_to | default(omit) }}"
+        urgency: "{{ closure_updates.urgency | default(omit) }}"
+        impact: "{{ closure_updates.impact | default(omit) }}"
+        close_notes: "{{ closure_updates.close_notes | default(omit) }}"
+        close_code: "{{ closure_updates.close_code | default(omit) }}"
         other:
-          # Closure-specific fields
-          close_notes: "{{ closure_updates.close_notes | default(omit) }}"
-          close_code: "{{ closure_updates.close_code | default(omit) }}"
+          # Additional closure fields
           resolution_method: "{{ closure_updates.resolution_method | default(omit) }}"
           work_notes: "{{ closure_updates.work_notes | default(omit) }}"
+          priority: "{{ closure_updates.priority | default(omit) }}"
+          assignment_group: "{{ closure_updates.assignment_group | default(omit) }}"
+          assigned_to: "{{ closure_updates.assigned_to | default(omit) }}"
           # Tracking fields
           resolved_by: "{{ servicenow_username }}"
           closed_by: "{{ servicenow_username }}"
