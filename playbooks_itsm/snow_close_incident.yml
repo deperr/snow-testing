@@ -6,7 +6,7 @@
 
 - name: Close ServiceNow Incident
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
 
   module_defaults:
     servicenow.itsm.incident:
